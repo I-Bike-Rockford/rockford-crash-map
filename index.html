@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fcfbf9">
+<title>Rockford Crash Map</title>
+<meta name="description" content="Fatal and serious-injury crashes in Rockford, Illinois, 2006–2025, from Illinois Department of Transportation crash data. An initiative of I Bike Rockford.">
+<meta property="og:title" content="Rockford Crash Map">
+<meta property="og:description" content="Fatal and serious-injury crashes in Rockford, Illinois, 2006–2025.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='%23C8553D' stroke='%231f2328' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='4' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="is-map">
+<a class="skip" href="#panel">Skip to filters</a>
+
+<header class="hdr">
+  <a class="brand" href="#" aria-label="Rockford Crash Map, home"><b>Rockford Crash Map</b><span>Fatal and serious crashes, 2006–2025</span></a>
+  <nav class="nav" aria-label="Main">
+    <a href="#" data-v="">Map</a><a href="#about" data-v="about">About the data</a><a href="#data" data-v="data">Data</a><a href="#contact" data-v="contact">Contact</a>
+  </nav>
+  <form class="search" id="search" role="search">
+    <label class="sr" for="q">Search for an address in Rockford</label>
+    <input id="q" type="search" placeholder="Search an address" autocomplete="off" enterkeyhint="search">
+    <button type="submit">Go</button>
+    <div class="search-msg" id="search-msg" role="status" hidden></div>
+  </form>
+</header>
+
+<div id="map" role="region" aria-label="Map of crashes"></div>
+<div class="loading" id="loading" role="status" hidden>Loading crashes…</div>
+
+<aside class="panel" id="panel" aria-label="Filters and totals" data-open="false">
+  <button type="button" class="sheet-handle" id="sheet-handle" aria-expanded="false" aria-controls="panel"><i></i><span id="sheet-summary">Loading…</span></button>
+
+  <div class="sec">
+    <h2>Who was involved</h2>
+    <div class="seg" id="modes" role="group" aria-label="Filter by mode">
+      <button type="button" data-mode="all" aria-pressed="true">All</button>
+      <button type="button" data-mode="ped" aria-pressed="false"><svg class="sw" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="11" fill="#C8553D"/></svg>Walking</button>
+      <button type="button" data-mode="bike" aria-pressed="false"><svg class="sw" viewBox="0 0 30 30" aria-hidden="true"><polygon points="15,2.5 27.5,15 15,27.5 2.5,15" fill="#2A7F8E"/></svg>Biking</button>
+      <button type="button" data-mode="veh" aria-pressed="false"><svg class="sw" viewBox="0 0 30 30" aria-hidden="true"><rect x="4.5" y="4.5" width="21" height="21" rx="4.5" fill="#5B5F97"/></svg>Vehicle</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Totals for these filters</h2>
+    <div class="tiles">
+      <div class="tile"><b id="t-n">–</b><span>Crashes</span></div>
+      <div class="tile"><b id="t-fatal">–</b><span>Fatal crashes</span></div>
+      <div class="tile"><b id="t-killed">–</b><span>People killed</span></div>
+      <div class="tile"><b id="t-serious">–</b><span>Serious injury crashes</span></div>
+      <div class="tile"><b id="t-ped">–</b><span>Involving a person walking</span></div>
+      <div class="tile"><b id="t-bike">–</b><span>Involving a person biking</span></div>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite" style="margin:8px 0 0"></p>
+    <div class="empty" id="empty" hidden>No crashes match these filters.<br><button type="button" class="btn small" id="empty-reset" style="margin-top:8px">Reset filters</button></div>
+  </div>
+
+  <div class="sec">
+    <h2>Severity</h2>
+    <div class="chips" id="sevs" role="group" aria-label="Filter by severity">
+      <button type="button" class="chip" data-s="0" aria-pressed="true">Fatal</button>
+      <button type="button" class="chip" data-s="1" aria-pressed="true">Serious</button>
+      <button type="button" class="chip" data-s="2" aria-pressed="false">Minor</button>
+      <button type="button" class="chip" data-s="3" aria-pressed="false">Possible</button>
+      <button type="button" class="chip" data-s="4" aria-pressed="false">No injury</button>
+    </div>
+    <p class="lede" id="sevnote" style="margin-top:6px;font-size:12.5px">Minor, possible and no-injury crashes (about 80,000) load when you turn one on.</p>
+  </div>
+
+  <div class="sec">
+    <h2><span>Year</span><span class="row" style="gap:6px"><button type="button" class="btn small" id="yr-5">Last 5 years</button><button type="button" class="btn small" id="yr-all">Clear</button></span></h2>
+    <div class="bars" id="bars-years" role="group" aria-label="Crashes by year. Select years to filter."></div>
+    <div class="key"><span><i style="background:#23272c"></i>Fatal</span><span><i style="background:#a9a59b"></i>Serious injury</span><span><i style="background:#d9d5cb"></i>Other severities</span></div>
+  </div>
+
+  <div class="sec">
+    <h2>Time of day</h2>
+    <div class="bars" id="bars-hours" role="group" aria-label="Crashes by time of day. Select times to filter."></div>
+  </div>
+
+  <div class="sec">
+    <h2>Map options</h2>
+    <div class="switch"><input type="checkbox" id="sw-out" checked><label for="sw-out">Show crashes outside city limits<small>Shown faded. IDOT lists them as Rockford, but they plot just outside the current limits.</small></label></div>
+    <div class="switch"><input type="checkbox" id="sw-count"><label for="sw-count">Count them in the totals<small>Off by default, so totals describe crashes inside the city limits.</small></label></div>
+    <div class="switch"><input type="checkbox" id="sw-extent"><label for="sw-extent">Only count crashes in the current map view<small>Totals and charts follow where you pan and zoom.</small></label></div>
+  </div>
+
+  <div class="sec">
+    <h2>How to read the map</h2>
+    <div class="legend" aria-label="Legend">
+      <div><svg width="22" height="22" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="11" fill="#C8553D" stroke="#fff" stroke-width="2"/></svg>Person walking</div>
+      <div><svg width="22" height="22" viewBox="0 0 30 30" aria-hidden="true"><polygon points="15,2.5 27.5,15 15,27.5 2.5,15" fill="#2A7F8E" stroke="#fff" stroke-width="2"/></svg>Person bicycling</div>
+      <div><svg width="22" height="22" viewBox="0 0 30 30" aria-hidden="true"><rect x="4.5" y="4.5" width="21" height="21" rx="4.5" fill="#5B5F97" stroke="#fff" stroke-width="2"/></svg>Other / vehicle</div>
+      <div><svg width="26" height="26" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="11" fill="#777" stroke="#111" stroke-width="3"/><circle cx="15" cy="15" r="3.6" fill="#fff"/></svg>Large, dark ring, white dot: fatal</div>
+      <div><svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="11" fill="#777" stroke="#fff" stroke-width="2"/></svg>Smaller: serious injury</div>
+      <div><svg width="22" height="22" viewBox="0 0 30 30" aria-hidden="true" style="opacity:.35"><circle cx="15" cy="15" r="11" fill="#777"/></svg>Faded: outside city limits</div>
+      <div style="grid-column:1/-1">A number on a point means several crashes are recorded at the same spot. Tap it to see them all.</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Map style</h2>
+    <div class="basemaps" id="bases" role="group" aria-label="Map style">
+      <button type="button" class="btn small" data-base="light" aria-pressed="true">Light</button>
+      <button type="button" class="btn small" data-base="sat" aria-pressed="false">Satellite</button>
+    </div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="btn-table">View as a table</button><button type="button" class="btn" id="btn-reset">Reset filters</button></div>
+  </div>
+</aside>
+
+<div class="tview" id="tview" hidden></div>
+
+<section class="view" id="view-about" hidden aria-labelledby="about-h"><article class="doc">
+<a class="back" href="#">← Back to the map</a>
+<h1 id="about-h">About the data: methodology and limitations</h1>
+<h2>Who makes this map</h2>
+<p>This map is an initiative of I Bike Rockford, a volunteer group. It is not a product of the City of Rockford, the Illinois Department of Transportation (IDOT), or any employer or firm. It is offered in good faith as a public resource.</p>
+<h2>What the map shows</h2>
+<p>Crashes on Rockford streets from 2006 through 2025 that were reported to police and entered in the State of Illinois crash database. The map highlights crashes in which someone was killed or seriously injured, with a focus on people walking and biking.</p>
+<p>Beyond mere data points, each dot represents a person: a cherished friend, a beloved family member. The map shows attributes gathered from public records. </p>
+<h2>Where the data comes from</h2>
+<ul>
+<li><strong>Crash records:</strong> Illinois Department of Transportation (IDOT) statewide crash data, 2006–2025. Rockford crashes were selected from IDOT's files. Records for 2016–2025 come from IDOT's Safety Data Mart extracts; records for 2006–2015 come from IDOT's earlier GIS crash extracts. This map contains IDOT crash data only, apart from the person-level facts about fatal crashes described next.</li>
+<li><strong>Person-level facts about deaths (role and age band):</strong> the U.S. National Highway Traffic Safety Administration's Fatality Analysis Reporting System (FARS), 2006–2024. IDOT's public crash files describe the crash, not the people in it, so for fatal crashes we matched IDOT records to FARS by date, time and location. Of 266 IDOT fatal crashes in 2006–2024, 258 (97%) matched confidently, and in every one of those both sources record the same number of people killed. The other eight had no confident match and show no person-level facts. FARS does not contain names. It covers deaths only (not injuries), and 2025 is not yet published, so 2025 fatal crashes show no person-level facts.</li>
+<li><strong>City limits:</strong> City of Rockford city limits, from the City's public GIS service (retrieved October 2026).</li>
+<li><strong>Data as of:</strong> October 2026. IDOT's most recent extract (2025) is dated July 22, 2026. IDOT revises past years after the fact, so counts can change slightly. The map ends at 2025. Data for 2026 will be added when IDOT publishes it.</li>
+</ul>
+<h2>How we prepared it</h2>
+<p>IDOT changed its data layout several times between 2006 and 2025. We combined all years into one consistent format: the same field names, the same category labels, and one location system. We repaired formatting errors in IDOT's files, removed 13 duplicate records, and tested every location against the city limits. Every field is described on the Data Dictionary page.</p>
+<h2>What the terms mean</h2>
+<p>Crash severity follows the standard KABCO scale and is assigned by the police officer at the scene, based on the most severe injury in the crash:</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>K</td>
+<td>Fatal: a person died</td>
+</tr>
+<tr>
+<td>A</td>
+<td>Serious injury: an incapacitating injury (for example, a person who could not walk away)</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Minor injury: visible, non-incapacitating injury</td>
+</tr>
+<tr>
+<td>C</td>
+<td>Possible injury: complaint of pain, no visible injury</td>
+</tr>
+<tr>
+<td>O</td>
+<td>No injury (property damage only)</td>
+</tr>
+</tbody>
+</table></div>
+<p>"Pedestrian" and "bicycle" crashes are crashes IDOT classifies as a pedestrian or pedalcyclist collision. "Serious injury crash" means a crash with at least one A-level injury, not the number of people seriously injured.</p>
+<h2>What this map cannot tell you</h2>
+<p><strong>These numbers are a minimum, not a complete count.</strong></p>
+<ul>
+<li><strong>Only police-reported crashes are included.</strong> Many crashes involving people walking and biking are never reported: when no one calls the police, when the person is hurt but leaves, or when no motor vehicle stops. Crashes reported later by phone or online are more likely to be missing or incomplete. The data to estimate how many are missed does not exist.</li>
+<li><strong>Near misses and falls are invisible.</strong> A person who swerves to avoid a car, hits a pothole, or falls off a bike and is hurt, without colliding with anything or filing a report, does not appear. Neither do the many close calls that never become a crash. A street can feel dangerous long before it shows up in this data.</li>
+<li><strong>Severity is an officer's judgment at the scene,</strong> not a medical finding. Injuries that prove more serious later may not be updated, and a crash can be reclassified after a death that occurs days later.</li>
+<li><strong>Locations are approximate.</strong> IDOT often places crashes at an intersection's center or along a street segment. Many crashes can share one point; where that happens the map groups them and shows a count. A dot is not an exact spot on the pavement.</li>
+<li><strong>People walking and biking are identified by the type of first collision</strong> recorded in the report. Some crashes that injured a pedestrian or cyclist may be coded differently and are not counted as such here.</li>
+<li><strong>No fault is assigned.</strong> The map does not show who caused a crash.</li>
+<li><strong>Recent years can change.</strong> The most recent data is the least complete.</li>
+<li><strong>Counts are not rates.</strong> More crashes on a street can simply mean more people use it. This map shows counts, not risk per mile traveled or per person.</li>
+<li><strong>Trends need care.</strong> The number of crashes and the way they are classified shift over 20 years because of changing reporting practices, forms, and events such as the 2020 pandemic. Dips and spikes (for example, an unusually high number of deaths in 2013 and 2021) should be checked against other sources before drawing conclusions.</li>
+<li><strong>City limits:</strong> about 3% of the crashes IDOT labels "Rockford" (2,251 of about 82,000) plot outside the current city limits, most of them within 150 feet of the line, on streets that run along the boundary. They are shown on the map as faded points and are left out of the headline totals unless you choose to include them. About 1,300 crashes since 2016 plot inside the city limits but are labeled by IDOT as unincorporated or as another town; they are not shown.</li>
+<li><strong>Street names</strong> come from IDOT for 2025 only. For earlier years the map shows the location but not a street name.</li>
+<li><strong>FARS differences:</strong> FARS counts a death if it happens within 30 days of the crash and applies its own coding rules, so its counts can differ from IDOT's. Roles (for example, person walking) come from FARS where matched and can differ from the collision type IDOT records.</li>
+</ul>
+<h2>Using this data</h2>
+<p>You are welcome to use the map and the downloadable data for advocacy, research, planning and reporting. Please credit "I Bike Rockford, using Illinois Department of Transportation crash data" and note the data-as-of date. Crash records are from IDOT. This map is not an official IDOT or City product, and its figures may differ from official statistics.</p>
+<h2>Language we use</h2>
+<p>We say "crash," not "accident," because crashes have causes that can be addressed. We say "person killed" or "person seriously injured."</p>
+<footer class="foot">An initiative of I Bike Rockford, a volunteer group. Not an official City of Rockford or IDOT product.</footer>
+</article></section>
+
+<section class="view" id="view-data" hidden aria-labelledby="data-h"><article class="doc">
+<a class="back" href="#">← Back to the map</a>
+<h1 id="data-h">Data</h1>
+<p>Everything on the map comes from crash records of the Illinois Department of Transportation (IDOT), 2006–2025, plus person-level facts about fatal crashes from the federal FARS database. Download the crash file to explore it yourself.</p>
+<div class="dl"><a href="downloads/Rockford_Crashes_2006-2025.csv" download>Download crashes, 2006–2025 (CSV)</a></div>
+<p class="note"><b>Please credit:</b> “I Bike Rockford, using Illinois Department of Transportation crash data.” The file has one row per crash (81,979 rows), including 39 crashes with no usable location and crashes that plot just outside the city limits (see the IN_CITY and XY_QA columns). It contains no names. Read <a href="#about">About the data</a> before drawing conclusions; counts are minimums, not rates.</p>
+
+<h2>Data dictionary</h2>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Format</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CRASH_ID</td>
+<td>Text (20)</td>
+<td>Unique crash identifier. 2016–2025: IDOT Illinois Crash Number (ICN), 12 digits, e.g. 202501010371. 2006–2015: legacy report ID, format YY-NNNNNNN, e.g. 06-1268553. Unique within every layer. Use it as the key for joining other data.</td>
+</tr>
+<tr>
+<td>SRC</td>
+<td>Text (20)</td>
+<td>Source batch the record came from: 'Legacy 2006-2015' (older IDOT GIS extracts) or 'IDOT SDM extract' (Safety Data Mart statewide extracts, 2016–2025).</td>
+</tr>
+<tr>
+<td>YEAR</td>
+<td>Integer (4)</td>
+<td>Crash year, four digits (e.g. 2019).</td>
+</tr>
+<tr>
+<td>CRASH_DATE</td>
+<td>Text (10)</td>
+<td>Crash date as ISO text YYYY-MM-DD (e.g. 2025-12-31). Built from year, month and day so it reads the same in every year.</td>
+</tr>
+<tr>
+<td>MONTH</td>
+<td>Integer (2)</td>
+<td>Month of crash, 1–12.</td>
+</tr>
+<tr>
+<td>DAY</td>
+<td>Integer (2)</td>
+<td>Day of month, 1–31.</td>
+</tr>
+<tr>
+<td>HOUR</td>
+<td>Integer (2)</td>
+<td>Hour of crash on a 24-hour clock, 0–23 (0 = midnight hour). Minutes are not carried; IDOT dropped crash minute from the 2025 extract.</td>
+</tr>
+<tr>
+<td>DOW</td>
+<td>Text (9)</td>
+<td>Day of week, full name (Monday … Sunday).</td>
+</tr>
+<tr>
+<td>SEVERITY</td>
+<td>Text (1)</td>
+<td>Crash severity on the KABCO scale, by the most severe injury in the crash: K = fatal, A = suspected serious injury, B = suspected minor injury, C = possible injury, O = no injury (property damage only), U = unknown (record had no severity).</td>
+</tr>
+<tr>
+<td>SEV_LABEL</td>
+<td>Text (34)</td>
+<td>Plain-language label for SEVERITY: Fatal; A - Serious injury; B - Minor injury; C - Possible injury; No injury (property damage only); Unknown.</td>
+</tr>
+<tr>
+<td>N_KILLED</td>
+<td>Integer (3)</td>
+<td>Number of people killed in the crash.</td>
+</tr>
+<tr>
+<td>N_INJURED</td>
+<td>Integer (3)</td>
+<td>Total number of people injured in the crash, all severities A+B+C (does not include fatalities).</td>
+</tr>
+<tr>
+<td>N_A_INJ</td>
+<td>Integer (3)</td>
+<td>Number of people with A (serious) injuries. 2016–2025 only; blank for 2006–2015 because the legacy extracts carry only a total.</td>
+</tr>
+<tr>
+<td>N_B_INJ</td>
+<td>Integer (3)</td>
+<td>Number of people with B (minor) injuries. 2016–2025 only.</td>
+</tr>
+<tr>
+<td>N_C_INJ</td>
+<td>Integer (3)</td>
+<td>Number of people with C (possible) injuries. 2016–2025 only.</td>
+</tr>
+<tr>
+<td>N_VEH</td>
+<td>Integer (2)</td>
+<td>Number of motor vehicles involved.</td>
+</tr>
+<tr>
+<td>COLL_TYPE</td>
+<td>Text (30)</td>
+<td>Type of first collision / first harmful event as coded by IDOT, harmonized across eras: Angle, Animal, Fixed Object, Front to Front, Front to Rear, Other Non-Collision, Other Object, Overturned, Parked Motor Vehicle, Pedalcyclist, Pedestrian, Rear to Front, Rear to Rear, Rear to Side, Sideswipe Opposite Direction, Sideswipe Same Direction, Train, Turning, Unknown.</td>
+</tr>
+<tr>
+<td>MODE</td>
+<td>Text (10)</td>
+<td>Vulnerable-road-user flag derived from COLL_TYPE: 'Pedestrian' (COLL_TYPE = Pedestrian), 'Bicycle' (COLL_TYPE = Pedalcyclist), else 'Other'. LIMITATION: based on first collision type only. A crash where a pedestrian or cyclist was hurt but the first event was something else is coded 'Other'.</td>
+</tr>
+<tr>
+<td>INTERSEC</td>
+<td>Text (1)</td>
+<td>Intersection-related crash: Y or N (as coded by the reporting officer).</td>
+</tr>
+<tr>
+<td>HIT_RUN</td>
+<td>Text (1)</td>
+<td>Hit-and-run: Y or N. 2016–2025 only; blank for 2006–2015.</td>
+</tr>
+<tr>
+<td>CAUSE1</td>
+<td>Text (80)</td>
+<td>Primary contributing circumstance coded by the reporting officer (e.g. 'Failing to Yield Right of Way'). 2016–2025 only. Officer-coded and preliminary; NOT a finding of fault.</td>
+</tr>
+<tr>
+<td>CAUSE2</td>
+<td>Text (80)</td>
+<td>Secondary contributing circumstance, same coding as CAUSE1. 2016–2025 only. '(N/A)' means none recorded.</td>
+</tr>
+<tr>
+<td>WEATHER</td>
+<td>Text (24)</td>
+<td>Weather condition: Clear, Cloudy/Overcast, Rain, Snow, Blowing Snow, Sleet/Hail, Freezing Rain/Drizzle, Fog/Smoke/Haze, Severe Cross Wind, Other, Unknown.</td>
+</tr>
+<tr>
+<td>LIGHTING</td>
+<td>Text (24)</td>
+<td>Lighting condition: Daylight, Dawn, Dusk, Darkness, Darkness - Lighted Road (written 'Darkness, Lighted Road'), Unknown.</td>
+</tr>
+<tr>
+<td>SURF_COND</td>
+<td>Text (20)</td>
+<td>Road surface condition: Dry, Wet, Snow or Slush, Ice, Sand, Mud, Dirt, Other, Unknown.</td>
+</tr>
+<tr>
+<td>RD_DEFECT</td>
+<td>Text (24)</td>
+<td>Road defect: No Defects, Worn Surface, Rut, Holes, Shoulders, Debris On Roadway, Construction Zone, Maintenance Zone, Utility Work Zone, Work Zone - Unknown, Other, Unknown. (Work-zone values appear only in the older extracts; newer extracts record work zones separately, see WORKZONE.)</td>
+</tr>
+<tr>
+<td>TRAF_CNTRL</td>
+<td>Text (28)</td>
+<td>Traffic control device at the crash location: No Controls, Traffic Signal, Stop Sign/Flasher, Yield, Lane Use Marking, School Zone, Pedestrian Crossing Sign, Flashing Control Signal, RR Crossing Gate/Sign, Other RR Crossing, Police/Flagman, No Passing, Delineators, Other Warning Sign, Other Regulatory Sign, Other, Unknown.</td>
+</tr>
+<tr>
+<td>TC_FUNC</td>
+<td>Text (26)</td>
+<td>Whether the traffic control was working: Functioning Properly, Functioning Improperly, Not Functioning, Worn Reflective Material, Missing, Other, Unknown. 2016–2025 only; blank when there was no control or for 2006–2015.</td>
+</tr>
+<tr>
+<td>WORKZONE</td>
+<td>Text (1)</td>
+<td>Crash in a work zone: Y or N. Blank = could not be determined (about 680 records in 2019 where IDOT's source file is misaligned).</td>
+</tr>
+<tr>
+<td>ROUTE</td>
+<td>Text (12)</td>
+<td>IDOT route number of the road (0 = none/local street). Numbers only, not street names.</td>
+</tr>
+<tr>
+<td>STREET</td>
+<td>Text (60)</td>
+<td>Street name of the crash location. Only available in the 2025 extract; blank for all other years.</td>
+</tr>
+<tr>
+<td>AT_INTERS</td>
+<td>Text (80)</td>
+<td>Nearest intersection as 'Street A/Street B'. 2025 only; blank otherwise.</td>
+</tr>
+<tr>
+<td>LAT</td>
+<td>Decimal (12,7)</td>
+<td>Latitude, WGS84 decimal degrees, computed from the point geometry.</td>
+</tr>
+<tr>
+<td>LON</td>
+<td>Decimal (12,7)</td>
+<td>Longitude, WGS84 decimal degrees, computed from the point geometry.</td>
+</tr>
+<tr>
+<td>XY_QA</td>
+<td>Text (32)</td>
+<td>Location quality flag. 'OK' = normal. 'FROM_IDOT_TS_XY' = geometry was invalid so IDOT's own coordinate columns were used. 'CHECK_OUTSIDE_EXPECTED_EXTENT' = IDOT assigns it to Rockford but the point is outside the expected city area; verify before mapping. 'NO_LOCATION' = no usable coordinates (such crashes appear in the CSV but are not mapped).</td>
+</tr>
+<tr>
+<td>IN_CITY</td>
+<td>Text (1)</td>
+<td>Y = the crash point falls inside the City of Rockford limits polygon (City of Rockford GIS, Parcel Viewer 'City Limits' layer, downloaded October 2026); N = IDOT labels it a Rockford crash but the point is outside that polygon; blank = no usable location. All IDOT-labeled Rockford crashes are kept; use this field to filter.</td>
+</tr>
+<tr>
+<td>FARS_MATCH</td>
+<td>Text (9)</td>
+<td>For fatal crashes in 2006–2024 matched to the federal FARS database: 'confirmed' (same date, within one hour and 0.25 mile) or 'probable' (slightly looser). Blank = not matched, not fatal, or 2025 (FARS has not published 2025).</td>
+</tr>
+<tr>
+<td>FARS_ROLES_AGE</td>
+<td>Text</td>
+<td>People killed, from FARS: role (driver, passenger, person walking, person bicycling) and five- or ten-year age band, separated by semicolons when more than one person died. No names.</td>
+</tr>
+<tr>
+<td>FARS_SEX</td>
+<td>Text</td>
+<td>Sex of each person killed, from FARS, in the same order as FARS_ROLES_AGE.</td>
+</tr>
+<tr>
+<td>DRUNK_DRIVER_INVOLVED</td>
+<td>Text (1)</td>
+<td>Y if FARS records at least one driver with a blood alcohol concentration of 0.08 or higher in the crash; N otherwise. Matched fatal crashes only.</td>
+</tr>
+</tbody>
+</table></div>
+<h2>Notes</h2>
+<ul>
+<li><strong>Coordinates:</strong> LAT and LON are WGS84 decimal degrees.</li>
+<li><strong>Blank values:</strong> a blank means the item was not collected for that year (for example, cause codes before 2016) or was not recorded; it does not mean "no".</li>
+<li><strong>Category labels</strong> were standardized across years because IDOT changed its wording over time. The original wording is preserved where it carries a different meaning.</li>
+<li><strong>Source:</strong> Illinois Department of Transportation crash data, 2006–2025.</li>
+</ul>
+<footer class="foot">An initiative of I Bike Rockford, a volunteer group. Not an official City of Rockford or IDOT product.</footer>
+</article></section>
+
+<section class="view" id="view-contact" hidden aria-labelledby="contact-h"><article class="doc">
+<a class="back" href="#">← Back to the map</a>
+<h1 id="contact-h">Contact</h1>
+<h2>Get in touch</h2>
+<p>This map is an initiative of I Bike Rockford, a volunteer group. We read every message and reply as volunteers' time allows.</p>
+<p><strong>Email:</strong> <a href="mailto:ibikerockford@gmail.com">ibikerockford@gmail.com</a></p>
+<h2>What to write to us about</h2>
+<ul>
+<li><strong>A crash in the wrong place, or a crash that seems to be missing.</strong> Please include the date and location, or the crash ID shown in the popup. Corrections to the official record have to come from the police or IDOT, but we can note issues on the map.</li>
+<li><strong>A question about the data or how to use it.</strong></li>
+<li><strong>A request about a crash that involved you or someone you love.</strong> If seeing a crash on this map is upsetting or you would like it handled differently, tell us. We will listen, and we will consider requests to adjust how a crash is shown. You do not need to explain.</li>
+<li><strong>Ideas, feedback or help.</strong> We welcome them.</li>
+</ul>
+<h2>Downloading the data</h2>
+<p>The crash data on this map is available on the Data page. All crash records come from the Illinois Department of Transportation.</p>
+<footer class="foot">An initiative of I Bike Rockford, a volunteer group. Not an official City of Rockford or IDOT product.</footer>
+</article></section>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
