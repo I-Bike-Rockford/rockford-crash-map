@@ -12,4 +12,4 @@ This is a static website: open `index.html` through any web server. Nothing here
 
 Map tiles: CARTO / OpenStreetMap contributors; Esri World Imagery for the satellite option. Address search uses OpenStreetMap Nominatim.
 
-Questions and corrections: ibikerockford@gmail.com 
+Questions and corrections: ibikerockford@gmail.com

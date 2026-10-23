@@ -7,6 +7,9 @@
   var COLOR = { ped: '#C8553D', bike: '#2A7F8E', veh: '#5B5F97' };
   var MODE_KEY = ['veh', 'ped', 'bike'];            // data value m: 0 other, 1 pedestrian, 2 bicycle
   var MODE_PRI = { 1: 0, 2: 1, 0: 2 };              // which mode wins when crashes share a point
+  var RC_NAME = ['Interstate or freeway', 'Principal arterial', 'Minor arterial', 'Collector', 'Local street'];
+  var OW_NAME = ['State-owned (IDOT)', 'County-owned', 'City or village street', 'Township or other'];
+  var roadLayers = [], roadCanvas;
   var MODE_LABEL = ['Motor vehicle', 'Person walking', 'Person bicycling'];
   var SEV_NAME = ['Fatal', 'Serious injury', 'Minor injury', 'Possible injury', 'No injury'];
   var HOUR_LABELS = ['12–3 am', '3–6 am', '6–9 am', '9 am–12', '12–3 pm', '3–6 pm', '6–9 pm', '9 pm–12', 'Unknown'];
@@ -19,7 +22,8 @@
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
   /* ---------- state ---------- */
-  var S = { mode: 'all', sev: new Set([0, 1]), years: new Set(), hours: new Set(), showOut: true, countOut: false, extent: false };
+  var DEF_YEARS = [2021, 2022, 2023, 2024, 2025];
+  var S = { mode: 'all', sev: new Set([0, 1]), years: new Set(DEF_YEARS), rc: new Set(), ow: new Set(), roads: true, hours: new Set(), showOut: true, countOut: false, extent: false };
   var rows = [], LUT = null, otherLoaded = false, otherLoading = false;
   var groups = new Map(), lastView = [];
   var map, kaLayer, dotLayer, canvas, baseLayers = {}, currentBase = null;
@@ -29,8 +33,12 @@
     var q = new URLSearchParams(location.search);
     if (q.get('m') && ['all', 'ped', 'bike', 'veh'].indexOf(q.get('m')) > -1) S.mode = q.get('m');
     if (q.get('s')) { S.sev = new Set(q.get('s').split('').map(Number).filter(function (n) { return n >= 0 && n <= 4; })); if (!S.sev.size) S.sev = new Set([0, 1]); }
-    if (q.get('y')) q.get('y').split(',').map(Number).forEach(function (y) { if (y >= Y0 && y <= Y1) S.years.add(y); });
+    if (q.get('y') === 'all') S.years.clear();
+    else if (q.get('y')) { S.years.clear(); q.get('y').split(',').map(Number).forEach(function (y) { if (y >= Y0 && y <= Y1) S.years.add(y); }); if (!S.years.size) DEF_YEARS.forEach(function (y) { S.years.add(y); }); }
     if (q.get('h')) q.get('h').split(',').map(Number).forEach(function (h) { if (h >= 0 && h <= 8) S.hours.add(h); });
+    if (q.get('r')) q.get('r').split('').map(Number).forEach(function (n) { if (n >= 0 && n <= 4) S.rc.add(n); });
+    if (q.get('w')) q.get('w').split('').map(Number).forEach(function (n) { if (n >= 0 && n <= 3) S.ow.add(n); });
+    if (q.get('a') === '0') S.roads = false;
     if (q.get('o') === '0') S.showOut = false;
     if (q.get('c') === '1') S.countOut = true;
   }
@@ -38,8 +46,12 @@
     var q = new URLSearchParams();
     if (S.mode !== 'all') q.set('m', S.mode);
     var s = Array.from(S.sev).sort().join(''); if (s !== '01') q.set('s', s);
-    if (S.years.size) q.set('y', Array.from(S.years).sort().join(','));
+    var ys = Array.from(S.years).sort().join(',');
+    if (!S.years.size) q.set('y', 'all'); else if (ys !== DEF_YEARS.join(',')) q.set('y', ys);
     if (S.hours.size) q.set('h', Array.from(S.hours).sort().join(','));
+    if (S.rc.size) q.set('r', Array.from(S.rc).sort().join(''));
+    if (S.ow.size) q.set('w', Array.from(S.ow).sort().join(''));
+    if (!S.roads) q.set('a', '0');
     if (!S.showOut) q.set('o', '0');
     if (S.countOut) q.set('c', '1');
     var qs = q.toString();
@@ -52,7 +64,7 @@
     LUT = j.meta.lut;
     for (var i = 0; i < n; i++) {
       out[i] = { id: j.id[i], y: j.y[i], mo: j.mo[i], d: j.d[i], h: j.h[i], s: j.s[i], k: j.k[i], i: j.i[i], v: j.v[i], m: j.m[i],
-        co: j.co[i], li: j.li[i], wx: j.wx[i], su: j.su[i], hr: j.hr[i], st: j.st[i], at: j.at[i], lat: j.lat[i], lon: j.lon[i], ci: j.ci[i], p: j.p[i] };
+        co: j.co[i], li: j.li[i], wx: j.wx[i], su: j.su[i], hr: j.hr[i], st: j.st[i], at: j.at[i], lat: j.lat[i], lon: j.lon[i], ci: j.ci[i], p: j.p[i], rc: j.rc ? j.rc[i] : -1, ow: j.ow ? j.ow[i] : -1 };
     }
     return out;
   }
@@ -71,6 +83,8 @@
     if (!S.sev.has(r.s)) return false;
     if (S.mode !== 'all' && MODE_KEY[r.m] !== S.mode) return false;
     if (!S.showOut && !r.ci && !S.countOut) return false;
+    if (S.rc.size && !S.rc.has(r.rc)) return false;
+    if (S.ow.size && !S.ow.has(r.ow)) return false;
     if (skip !== 'y' && S.years.size && !S.years.has(r.y)) return false;
     if (skip !== 'h' && S.hours.size && !S.hours.has(hourBucket(r.h))) return false;
     return true;
@@ -136,6 +150,7 @@
     var h = '<h3>' + esc(titleOf(r)) + ' <span class="tag ' + MODE_KEY[r.m] + '">' + MODE_LABEL[r.m] + '</span></h3>';
     h += '<p class="when">' + esc(dateText(r)) + ' · ' + esc(hourText(r.h)) + '</p>';
     if (r.st || r.at) h += '<p class="where">' + esc(locText(r)) + '</p>';
+    if (r.rc >= 0) h += '<p class="road">' + RC_NAME[r.rc] + (r.ow >= 0 ? ' · ' + OW_NAME[r.ow] : '') + '</p>';
     var dl = '';
     function add(k, v) { if (v) dl += '<dt>' + k + '</dt><dd>' + esc(v) + '</dd>'; }
     add('Collision', LUT.coll[r.co]);
@@ -225,6 +240,13 @@
   }
 
   /* ---------- panel ---------- */
+  function yearNote() {
+    var a = Array.from(S.years).sort();
+    if (!a.length) return 'Showing all years, ' + Y0 + '–' + Y1 + '.';
+    if (a.length === 1) return 'Showing ' + a[0] + ' only.';
+    if (a[a.length - 1] - a[0] === a.length - 1) return 'Showing ' + a[0] + '–' + a[a.length - 1] + '.';
+    return 'Showing ' + a.length + ' selected years.';
+  }
   function updatePanel(counts) {
     var t = tally(counts);
     $('#t-n').textContent = fmt(t.n); $('#t-fatal').textContent = fmt(t.fatal); $('#t-killed').textContent = fmt(t.killed);
@@ -232,6 +254,7 @@
     var st = t.n ? fmt(t.n) + ' crashes shown: ' + fmt(t.fatal) + ' fatal, ' + fmt(t.serious) + ' serious injury.' : 'No crashes match these filters.';
     if (S.extent) st += ' Counting only the current map view.';
     $('#status').textContent = st;
+    $('#yrnote-text').textContent = yearNote(); $('#yrnote-all').hidden = !S.years.size;
     $('#sheet-summary').textContent = t.n ? fmt(t.n) + ' crashes · ' + fmt(t.killed) + ' killed · Filters' : 'No crashes match · Filters';
     $('#empty').hidden = t.n > 0 || lastView.length > 0;
     drawBars('years', 'y', Y0, Y1);
@@ -289,6 +312,9 @@
     $('#sw-out').checked = S.showOut; $('#sw-count').checked = S.countOut; $('#sw-extent').checked = S.extent;
     $$('#bases button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.base === currentBase)); });
     $('#sevnote').hidden = otherLoaded;
+    $$('#rcs button').forEach(function (b) { b.setAttribute('aria-pressed', String(S.rc.has(+b.dataset.r))); });
+    $$('#ows button').forEach(function (b) { b.setAttribute('aria-pressed', String(S.ow.has(+b.dataset.w))); });
+    $('#sw-roads').checked = S.roads;
   }
   function wire() {
     $('#modes').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; S.mode = b.dataset.mode; syncControls(); scheduleRender(); });
@@ -298,9 +324,13 @@
       syncControls();
       if (S.sev.has(2) || S.sev.has(3) || S.sev.has(4)) loadOther().then(function () { syncControls(); render(); }); else render();
     });
+    $('#rcs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; var n = +b.dataset.r; if (S.rc.has(n)) S.rc.delete(n); else S.rc.add(n); syncControls(); scheduleRender(); });
+    $('#ows').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; var n = +b.dataset.w; if (S.ow.has(n)) S.ow.delete(n); else S.ow.add(n); syncControls(); styleRoads(); scheduleRender(); });
+    $('#sw-roads').addEventListener('change', function (e) { S.roads = e.target.checked; styleRoads(); writeQuery(); });
     $('#bars-years').addEventListener('click', function (e) { var b = e.target.closest('.bar'); if (!b) return; var y = +b.dataset.k; if (S.years.has(y)) S.years.delete(y); else S.years.add(y); render(); });
     $('#bars-hours').addEventListener('click', function (e) { var b = e.target.closest('.bar'); if (!b) return; var h = +b.dataset.k; if (S.hours.has(h)) S.hours.delete(h); else S.hours.add(h); render(); });
-    $('#yr-all').addEventListener('click', function () { S.years.clear(); S.hours.clear(); render(); });
+    $('#yr-all').addEventListener('click', function () { S.years.clear(); render(); });
+    if ($('#yrnote-all')) $('#yrnote-all').addEventListener('click', function () { S.years.clear(); render(); });
     $('#yr-5').addEventListener('click', function () { S.years = new Set([2021, 2022, 2023, 2024, 2025]); render(); });
     $('#sw-out').addEventListener('change', function (e) { S.showOut = e.target.checked; render(); });
     $('#sw-count').addEventListener('change', function (e) { S.countOut = e.target.checked; render(); });
@@ -333,16 +363,36 @@
       setTimeout(function () { if (msg.textContent.indexOf('Searching') < 0) msg.hidden = true; }, 6000);
     });
   }
-  function resetFilters() { S.mode = 'all'; S.sev = new Set([0, 1]); S.years.clear(); S.hours.clear(); S.showOut = true; S.countOut = false; S.extent = false; syncControls(); render(); }
+  function resetFilters() { S.mode = 'all'; S.sev = new Set([0, 1]); S.years = new Set(DEF_YEARS); S.hours.clear(); S.rc.clear(); S.ow.clear(); S.roads = true; S.showOut = true; S.countOut = false; S.extent = false; syncControls(); render(); }
 
   /* ---------- map ---------- */
+  var ROAD_W = [3.2, 2.2, 1.3, 1];
+  function styleRoads() {
+    if (!roadLayers.length) return;
+    var z = map.getZoom(), f = z <= 11 ? 0.7 : z <= 13 ? 0.9 : z <= 15 ? 1.2 : 1.7, sat = currentBase === 'sat';
+    roadLayers.forEach(function (l, i) {
+      var dim = S.ow.size && !S.ow.has(i);
+      if (!S.roads) { l.setStyle({ opacity: 0 }); return; }
+      l.setStyle({ color: sat ? '#ffffff' : '#a8a59e', weight: ROAD_W[i] * f, opacity: (sat ? 0.6 : 0.85) * (dim ? 0.3 : 1) });
+    });
+  }
+  function loadRoads() {
+    getJSON('data/arterials.json').then(function (j) {
+      roadCanvas = L.canvas({ pane: 'roads', padding: 0.3 });
+      [0, 1, 2, 3].forEach(function (i) {
+        var l = L.polyline(j.o[i] ? j.o[i].map(function (ln) { return ln.map(function (c) { return [c[1], c[0]]; }); }) : [], { renderer: roadCanvas, interactive: false, lineCap: 'round', lineJoin: 'round', smoothFactor: 1.5 });
+        l.addTo(map); roadLayers.push(l);
+      });
+      styleRoads();
+    }).catch(function () { });
+  }
   function setBase(k) {
     if (currentBase && baseLayers[currentBase]) map.removeLayer(baseLayers[currentBase]);
-    currentBase = k; baseLayers[k].addTo(map); baseLayers[k].bringToBack(); store('rcm-base', k); syncControls();
+    currentBase = k; baseLayers[k].addTo(map); baseLayers[k].bringToBack(); store('rcm-base', k); syncControls(); styleRoads();
   }
   function initMap() {
     canvas = L.canvas({ padding: 0.5 });
-    map = L.map('map', { zoomControl: false, preferCanvas: true, minZoom: 10, maxZoom: 19, maxBounds: [[41.95, -89.65], [42.55, -88.55]], maxBoundsViscosity: 0.7, keyboard: true });
+    map = L.map('map', { zoomSnap: 0.5, zoomDelta: 1, wheelPxPerZoomLevel: 90,  zoomControl: false, preferCanvas: true, minZoom: 10, maxZoom: 19, maxBounds: [[41.95, -89.65], [42.55, -88.55]], maxBoundsViscosity: 0.7, keyboard: true });
     var zoomCtl = L.control.zoom({ position: 'topright' }).addTo(map);
     var cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' });
     baseLayers.light = cartoLight;
@@ -359,6 +409,8 @@
     }
     baseLayers.sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' });
     var saved = store('rcm-base'); setBase(saved && baseLayers[saved] ? saved : 'light');
+    map.createPane('roads').style.zIndex = 380; map.getPane('roads').style.pointerEvents = 'none';
+    loadRoads();
     dotLayer = L.layerGroup().addTo(map); kaLayer = L.layerGroup().addTo(map);
     map.setView([42.2711, -89.094], window.innerWidth < 820 ? 11 : 12);
     var locCtl = L.control({ position: 'topright' });
@@ -378,7 +430,8 @@
       map.setView(e.latlng, 16); if (window._me) map.removeLayer(window._me); window._me = L.circleMarker(e.latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#1a56db', fillOpacity: 1 }).addTo(map);
     });
     map.on('locationerror', function () { $('#status').textContent = 'Could not get your location.'; });
-    map.on('zoomend', scheduleRender);
+    var lastK = -1;
+    map.on('zoomend', function () { styleRoads(); var z = map.getZoom(), k = z <= 11 ? 0 : z <= 13 ? 1 : z <= 15 ? 2 : 3; if (k !== lastK) { lastK = k; scheduleRender(); } });
     var mt; map.on('moveend', function () { if (S.extent) { clearTimeout(mt); mt = setTimeout(render, 150); } });
   }
 

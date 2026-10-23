@@ -54,6 +54,7 @@
       <div class="tile"><b id="t-ped">–</b><span>Involving a person walking</span></div>
       <div class="tile"><b id="t-bike">–</b><span>Involving a person biking</span></div>
     </div>
+    <p class="yrnote"><b id="yrnote-text"></b> <button type="button" class="btn small" id="yrnote-all">Show all years</button></p>
     <p class="status" id="status" role="status" aria-live="polite" style="margin:8px 0 0"></p>
     <div class="empty" id="empty" hidden>No crashes match these filters.<br><button type="button" class="btn small" id="empty-reset" style="margin-top:8px">Reset filters</button></div>
   </div>
@@ -71,7 +72,7 @@
   </div>
 
   <div class="sec">
-    <h2><span>Year</span><span class="row" style="gap:6px"><button type="button" class="btn small" id="yr-5">Last 5 years</button><button type="button" class="btn small" id="yr-all">Clear</button></span></h2>
+    <h2><span>Year</span><span class="row" style="gap:6px"><button type="button" class="btn small" id="yr-5">Last 5 years</button><button type="button" class="btn small" id="yr-all">All years</button></span></h2>
     <div class="bars" id="bars-years" role="group" aria-label="Crashes by year. Select years to filter."></div>
     <div class="key"><span><i style="background:#23272c"></i>Fatal</span><span><i style="background:#a9a59b"></i>Serious injury</span><span><i style="background:#d9d5cb"></i>Other severities</span></div>
   </div>
@@ -82,7 +83,28 @@
   </div>
 
   <div class="sec">
+    <h2>Road</h2>
+    <p class="subh">Type of road</p>
+    <div class="chips" id="rcs" role="group" aria-label="Filter by type of road">
+      <button type="button" class="chip" data-r="0" aria-pressed="false">Interstate / freeway</button>
+      <button type="button" class="chip" data-r="1" aria-pressed="false">Principal arterial</button>
+      <button type="button" class="chip" data-r="2" aria-pressed="false">Minor arterial</button>
+      <button type="button" class="chip" data-r="3" aria-pressed="false">Collector</button>
+      <button type="button" class="chip" data-r="4" aria-pressed="false">Local street</button>
+    </div>
+    <p class="subh">Who owns the road</p>
+    <div class="chips" id="ows" role="group" aria-label="Filter by road owner">
+      <button type="button" class="chip" data-w="0" aria-pressed="false">State (IDOT)</button>
+      <button type="button" class="chip" data-w="1" aria-pressed="false">County</button>
+      <button type="button" class="chip" data-w="2" aria-pressed="false">City or village</button>
+      <button type="button" class="chip" data-w="3" aria-pressed="false">Township / other</button>
+    </div>
+    <p class="lede" style="margin-top:6px;font-size:12.5px">Each crash is matched to the nearest mapped road. Choose none to see all.</p>
+  </div>
+
+  <div class="sec">
     <h2>Map options</h2>
+    <div class="switch"><input type="checkbox" id="sw-roads" checked><label for="sw-roads">Show arterial roads by owner<small>Thicker gray lines are state roads; thinner lines are county, then city and township roads.</small></label></div>
     <div class="switch"><input type="checkbox" id="sw-out" checked><label for="sw-out">Show crashes outside city limits<small>Shown faded. IDOT lists them as Rockford, but they plot just outside the current limits.</small></label></div>
     <div class="switch"><input type="checkbox" id="sw-count"><label for="sw-count">Count them in the totals<small>Off by default, so totals describe crashes inside the city limits.</small></label></div>
     <div class="switch"><input type="checkbox" id="sw-extent"><label for="sw-extent">Only count crashes in the current map view<small>Totals and charts follow where you pan and zoom.</small></label></div>
@@ -97,6 +119,10 @@
       <div><svg width="26" height="26" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="11" fill="#777" stroke="#111" stroke-width="3"/><circle cx="15" cy="15" r="3.6" fill="#fff"/></svg>Large, dark ring, white dot: fatal</div>
       <div><svg width="20" height="20" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="11" fill="#777" stroke="#fff" stroke-width="2"/></svg>Smaller: serious injury</div>
       <div><svg width="22" height="22" viewBox="0 0 30 30" aria-hidden="true" style="opacity:.35"><circle cx="15" cy="15" r="11" fill="#777"/></svg>Faded: outside city limits</div>
+      <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="3.2" stroke-linecap="round"/></svg>State road (IDOT)</div>
+      <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="2.2" stroke-linecap="round"/></svg>County road</div>
+      <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="1.3" stroke-linecap="round"/></svg>City or village arterial</div>
+      <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="1" stroke-linecap="round"/></svg>Township or other</div>
       <div style="grid-column:1/-1">A number on a point means several crashes are recorded at the same spot. Tap it to see them all.</div>
     </div>
   </div>
@@ -191,7 +217,7 @@
 <h1 id="data-h">Data</h1>
 <p>Everything on the map comes from crash records of the Illinois Department of Transportation (IDOT), 2006–2025, plus person-level facts about fatal crashes from the federal FARS database. Download the crash file to explore it yourself.</p>
 <div class="dl"><a href="downloads/Rockford_Crashes_2006-2025.csv" download>Download crashes, 2006–2025 (CSV)</a></div>
-<p class="note"><b>Please credit:</b> “I Bike Rockford, using Illinois Department of Transportation crash data.” The file has one row per crash (81,979 rows), including 39 crashes with no usable location and crashes that plot just outside the city limits (see the IN_CITY and XY_QA columns). It contains no names. Read <a href="#about">About the data</a> before drawing conclusions; counts are minimums, not rates.</p>
+<p class="note"><b>Please credit:</b> “I Bike Rockford, using Illinois Department of Transportation crash data.” The file has one row per crash (81,979 rows), including 39 crashes with no usable location and crashes that plot just outside the city limits (see the IN_CITY and XY_QA columns). It contains no names. Road class and road owner come from IDOT’s statewide functional class and jurisdiction map layers, matched to each crash by location (see the dictionary below); they describe the road, not who was at fault. Read <a href="#about">About the data</a> before drawing conclusions; counts are minimums, not rates.</p>
 
 <h2>Data dictionary</h2>
 <div class="tbl"><table>
@@ -382,6 +408,16 @@
 <td>IN_CITY</td>
 <td>Text (1)</td>
 <td>Y = the crash point falls inside the City of Rockford limits polygon (City of Rockford GIS, Parcel Viewer 'City Limits' layer, downloaded October 2026); N = IDOT labels it a Rockford crash but the point is outside that polygon; blank = no usable location. All IDOT-labeled Rockford crashes are kept; use this field to filter.</td>
+</tr>
+<tr>
+<td>ROAD_CLASS</td>
+<td>Text</td>
+<td>Functional class of the road the crash was matched to, from the Illinois Department of Transportation (IDOT) functional class layer: Interstate or freeway, Principal arterial, Minor arterial, Collector or Local street. Matched by location to the nearest mapped road within 100 feet; where a crash is within 25 feet of more than one road (such as at an intersection) the higher-class road is used. Blank if no road is within 100 feet.</td>
+</tr>
+<tr>
+<td>ROAD_OWNER</td>
+<td>Text</td>
+<td>Who has jurisdiction over that road, from the IDOT jurisdiction layer: State (IDOT), County, City or village, or Township or other (includes the Tollway). Matched the same way as ROAD_CLASS. Blank if no road is within 100 feet.</td>
 </tr>
 <tr>
 <td>FARS_MATCH</td>
