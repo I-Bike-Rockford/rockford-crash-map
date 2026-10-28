@@ -8,7 +8,7 @@
   var MODE_KEY = ['veh', 'ped', 'bike'];            // data value m: 0 other, 1 pedestrian, 2 bicycle
   var MODE_PRI = { 1: 0, 2: 1, 0: 2 };              // which mode wins when crashes share a point
   var RC_NAME = ['Interstate or freeway', 'Principal arterial', 'Minor arterial', 'Collector', 'Local street'];
-  var OW_NAME = ['State-owned (IDOT)', 'County-owned', 'City or village street', 'Township or other'];
+  var OW_NAME = ['State-owned (IDOT)', 'County-owned', 'City street', 'Township or other'];
   var roadLayers = [], roadCanvas;
   var MODE_LABEL = ['Motor vehicle', 'Person walking', 'Person bicycling'];
   var SEV_NAME = ['Fatal', 'Serious injury', 'Minor injury', 'Possible injury', 'No injury'];
@@ -23,14 +23,17 @@
 
   /* ---------- state ---------- */
   var DEF_YEARS = [2021, 2022, 2023, 2024, 2025];
-  var S = { mode: 'all', sev: new Set([0, 1]), years: new Set(DEF_YEARS), rc: new Set(), ow: new Set(), roads: true, hours: new Set(), showOut: true, countOut: false, extent: false };
+  var S = { mode: 'all', sev: new Set([0, 1]), years: new Set(DEF_YEARS), rc: new Set(), ow: new Set(), roads: true, hin: false, hinMode: 'all', hours: new Set(), showOut: true, countOut: false, extent: false };
   var rows = [], LUT = null, otherLoaded = false, otherLoading = false;
   var groups = new Map(), lastView = [];
   var map, kaLayer, dotLayer, canvas, baseLayers = {}, currentBase = null;
 
   /* ---------- url state ---------- */
+  var startView = null, viewMoved = false;
   function readQuery() {
     var q = new URLSearchParams(location.search);
+    var ll = (q.get('ll') || '').split(',').map(Number), z = parseFloat(q.get('z'));
+    if (ll.length === 2 && isFinite(ll[0]) && isFinite(ll[1]) && ll[0] > 41.9 && ll[0] < 42.6 && ll[1] > -89.7 && ll[1] < -88.5 && isFinite(z) && z >= 10 && z <= 19) startView = { c: [ll[0], ll[1]], z: z };
     if (q.get('m') && ['all', 'ped', 'bike', 'veh'].indexOf(q.get('m')) > -1) S.mode = q.get('m');
     if (q.get('s')) { S.sev = new Set(q.get('s').split('').map(Number).filter(function (n) { return n >= 0 && n <= 4; })); if (!S.sev.size) S.sev = new Set([0, 1]); }
     if (q.get('y') === 'all') S.years.clear();
@@ -39,6 +42,7 @@
     if (q.get('r')) q.get('r').split('').map(Number).forEach(function (n) { if (n >= 0 && n <= 4) S.rc.add(n); });
     if (q.get('w')) q.get('w').split('').map(Number).forEach(function (n) { if (n >= 0 && n <= 3) S.ow.add(n); });
     if (q.get('a') === '0') S.roads = false;
+    if (q.get('n') === 'all' || q.get('n') === 'pb') { S.hin = true; S.hinMode = q.get('n'); }
     if (q.get('o') === '0') S.showOut = false;
     if (q.get('c') === '1') S.countOut = true;
   }
@@ -52,8 +56,10 @@
     if (S.rc.size) q.set('r', Array.from(S.rc).sort().join(''));
     if (S.ow.size) q.set('w', Array.from(S.ow).sort().join(''));
     if (!S.roads) q.set('a', '0');
+    if (S.hin) q.set('n', S.hinMode);
     if (!S.showOut) q.set('o', '0');
     if (S.countOut) q.set('c', '1');
+    if (map && (viewMoved || startView)) { var c = map.getCenter(); q.set('ll', c.lat.toFixed(5) + ',' + c.lng.toFixed(5)); q.set('z', String(Math.round(map.getZoom() * 2) / 2)); }
     var qs = q.toString();
     try { history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash); } catch (e) { }
   }
@@ -314,7 +320,9 @@
     $('#sevnote').hidden = otherLoaded;
     $$('#rcs button').forEach(function (b) { b.setAttribute('aria-pressed', String(S.rc.has(+b.dataset.r))); });
     $$('#ows button').forEach(function (b) { b.setAttribute('aria-pressed', String(S.ow.has(+b.dataset.w))); });
-    $('#sw-roads').checked = S.roads;
+    $('#sw-roads').checked = S.roads; $('#sw-hin').checked = S.hin; $('#hin-mode').hidden = !S.hin;
+    $$('#hin-mode button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.hin === S.hinMode)); });
+    styleHin();
   }
   function wire() {
     $('#modes').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; S.mode = b.dataset.mode; syncControls(); scheduleRender(); });
@@ -326,6 +334,8 @@
     });
     $('#rcs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; var n = +b.dataset.r; if (S.rc.has(n)) S.rc.delete(n); else S.rc.add(n); syncControls(); scheduleRender(); });
     $('#ows').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; var n = +b.dataset.w; if (S.ow.has(n)) S.ow.delete(n); else S.ow.add(n); syncControls(); styleRoads(); scheduleRender(); });
+    $('#sw-hin').addEventListener('change', function (e) { S.hin = e.target.checked; syncControls(); writeQuery(); });
+    $('#hin-mode').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; S.hinMode = b.dataset.hin; syncControls(); writeQuery(); });
     $('#sw-roads').addEventListener('change', function (e) { S.roads = e.target.checked; styleRoads(); writeQuery(); });
     $('#bars-years').addEventListener('click', function (e) { var b = e.target.closest('.bar'); if (!b) return; var y = +b.dataset.k; if (S.years.has(y)) S.years.delete(y); else S.years.add(y); render(); });
     $('#bars-hours').addEventListener('click', function (e) { var b = e.target.closest('.bar'); if (!b) return; var h = +b.dataset.k; if (S.hours.has(h)) S.hours.delete(h); else S.hours.add(h); render(); });
@@ -335,22 +345,154 @@
     $('#sw-out').addEventListener('change', function (e) { S.showOut = e.target.checked; render(); });
     $('#sw-count').addEventListener('change', function (e) { S.countOut = e.target.checked; render(); });
     $('#sw-extent').addEventListener('change', function (e) { S.extent = e.target.checked; render(); });
+    $('#btn-copy').addEventListener('click', function () {
+      writeQuery(); viewMoved = true; writeQuery();
+      var url = location.origin + location.pathname + location.search, msg = $('#copy-msg');
+      function done(ok) { msg.textContent = ok ? 'Link copied. It opens this same view: filters, position and zoom.' : 'Could not copy. Copy the address from your browser instead.'; clearTimeout(done.t); done.t = setTimeout(function () { msg.textContent = ''; }, 5000); }
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(function () { done(true); }, function () { done(false); });
+      else { var ta = document.createElement('textarea'); ta.value = url; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); var ok = false; try { ok = document.execCommand('copy'); } catch (e) { } document.body.removeChild(ta); done(ok); }
+    });
     $('#btn-reset').addEventListener('click', resetFilters);
     $('#empty-reset').addEventListener('click', resetFilters);
     $('#btn-table').addEventListener('click', openTable);
     $('#bases').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; setBase(b.dataset.base); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#tview').hidden) closeTable(); });
-    // bottom sheet
-    var panel = $('#panel'), handle = $('#sheet-handle');
-    function setOpen(o) { panel.dataset.open = String(o); handle.setAttribute('aria-expanded', String(o)); }
-    handle.addEventListener('click', function () { if (!dragMoved) setOpen(panel.dataset.open !== 'true'); });
-    var sy = 0, dragMoved = false, startOpen = false;
-    handle.addEventListener('pointerdown', function (e) { sy = e.clientY; dragMoved = false; startOpen = panel.dataset.open === 'true'; handle.setPointerCapture(e.pointerId); });
-    handle.addEventListener('pointermove', function (e) { if (!handle.hasPointerCapture(e.pointerId)) return; if (Math.abs(e.clientY - sy) > 10) dragMoved = true; });
-    handle.addEventListener('pointerup', function (e) { if (dragMoved) { var dy = e.clientY - sy; if (dy < -20) setOpen(true); else if (dy > 20) setOpen(false); setTimeout(function () { dragMoved = false; }, 0); } });
+    // bottom sheet (phones): follows the finger 1:1, rubber-bands at the edges, flicks toward where the gesture was heading, springs to rest
+    var panel = $('#panel'), handle = $('#sheet-handle'), mq = matchMedia('(max-width: 820px)'), reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    var sheetState = 'collapsed', sy = 0, svel = 0, sraf = 0, sdrag = null;
+    function isMobile() { return mq.matches; }
+    var probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)';
+    document.body.appendChild(probe);
+    function pts() {
+      var h = panel.offsetHeight || innerHeight, safe = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+      return { collapsed: Math.max(0, h - (handle.offsetHeight + safe + 6)), half: Math.max(0, h * 0.45), full: 0 };
+    }
+    function setY(v) { sy = v; panel.style.setProperty('--sheet-y', v.toFixed(1) + 'px'); }
+    function rubber(over, dim) { return (over * dim * 0.55) / (dim + 0.55 * Math.abs(over)); }
+    function bounded(raw) { var p = pts(), D = 150; return raw < p.full ? p.full - rubber(p.full - raw, D) : raw > p.collapsed ? p.collapsed + rubber(raw - p.collapsed, D) : raw; }
+    function nearest(v) { var p = pts(), best = 'collapsed', d = Infinity; Object.keys(p).forEach(function (k) { if (Math.abs(p[k] - v) < d) { d = Math.abs(p[k] - v); best = k; } }); return best; }
+    function project(v) { return (v / 1000) * 0.998 / (1 - 0.998); }
+    function setExpanded() { handle.setAttribute('aria-expanded', String(sheetState !== 'collapsed')); panel.dataset.open = String(sheetState !== 'collapsed'); }
+    function springTo(target, v0, damping) {
+      cancelAnimationFrame(sraf);
+      if (reduce.matches) { setY(target); return; }
+      var resp = 0.3, k = Math.pow(2 * Math.PI / resp, 2), c = 4 * Math.PI * damping / resp, v = v0 || 0, last = performance.now();
+      function step(now) {
+        var dt = Math.min(0.064, (now - last) / 1000); last = now;
+        var n = Math.max(1, Math.ceil(dt / 0.004)), h = dt / n, pos = sy;
+        for (var i = 0; i < n; i++) { v += (-k * (pos - target) - c * v) * h; pos += v * h; }
+        setY(pos);
+        if (Math.abs(pos - target) < 0.4 && Math.abs(v) < 8) { setY(target); sraf = 0; return; }
+        sraf = requestAnimationFrame(step);
+      }
+      sraf = requestAnimationFrame(step);
+    }
+    function goTo(name, v0, damping) { sheetState = name; setExpanded(); springTo(pts()[name], v0, damping == null ? 1 : damping); }
+    var cycle = { collapsed: 'half', half: 'full', full: 'collapsed' };
+    handle.addEventListener('pointerdown', function (e) {
+      if (!isMobile() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      cancelAnimationFrame(sraf); sraf = 0;
+      sdrag = { id: e.pointerId, startPtr: e.clientY, startY: sy, moved: false, hist: [{ t: e.timeStamp, y: sy }] };
+      panel.classList.add('sheet-dragging');
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { }
+    });
+    handle.addEventListener('pointermove', function (e) {
+      if (!sdrag || e.pointerId !== sdrag.id) return;
+      var dy = e.clientY - sdrag.startPtr;
+      if (!sdrag.moved && Math.abs(dy) < 4) return;
+      sdrag.moved = true; setY(bounded(sdrag.startY + dy));
+      sdrag.hist.push({ t: e.timeStamp, y: sy }); while (sdrag.hist.length > 2 && e.timeStamp - sdrag.hist[0].t > 100) sdrag.hist.shift();
+    });
+    function sheetUp(e) {
+      if (!sdrag || e.pointerId !== sdrag.id) return;
+      var d = sdrag; sdrag = null; panel.classList.remove('sheet-dragging');
+      if (!d.moved) { goTo(cycle[sheetState], 0, 1); return; }
+      var a = d.hist[0], b = d.hist[d.hist.length - 1], dt = Math.max(1, b.t - a.t), v = (b.y - a.y) / dt * 1000;
+      if (e.timeStamp - b.t > 80) v = 0;
+      goTo(nearest(sy + project(v)), v, Math.abs(v) > 300 ? 0.85 : 1);
+    }
+    handle.addEventListener('pointerup', sheetUp); handle.addEventListener('pointercancel', sheetUp);
+    handle.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goTo(sheetState === 'collapsed' ? 'half' : 'collapsed', 0, 1); } });
+    function sheetLayout() {
+      document.documentElement.style.setProperty('--peek', Math.round((panel.offsetHeight || innerHeight) - pts().collapsed) + 'px');
+      if (isMobile()) { cancelAnimationFrame(sraf); setY(pts()[sheetState]); } else panel.style.removeProperty('--sheet-y');
+      setTimeout(function () { map.invalidateSize(); }, 0);
+    }
+    addEventListener('resize', sheetLayout); (mq.addEventListener ? mq.addEventListener('change', sheetLayout) : mq.addListener(sheetLayout));
+    sheetLayout(); setExpanded();
+    var wt; map.on('moveend', function () { viewMoved = true; clearTimeout(wt); wt = setTimeout(writeQuery, 300); });
+    map.on('popupopen', function () { if (isMobile() && sheetState !== 'collapsed') goTo('collapsed', 0, 1); });
+    map.on('click', function () { if (isMobile() && sheetState === 'full') goTo('half', 0, 1); });
+    // address suggestions (Rockford addresses from county parcel data; property addresses only)
+    var A = null, aLoading = null, sugItems = [], sugIdx = -1, qEl = $('#q'), sugEl = $('#sug');
+    function loadAddr() {
+      if (A || aLoading) return aLoading;
+      aLoading = getJSON('data/addresses.json').then(function (j) { A = { a: j.a, y: j.y, x: j.x, l: j.a.map(function (t) { return t.toLowerCase(); }) }; }).catch(function () { aLoading = null; });
+      return aLoading;
+    }
+    function closeSug() { sugEl.hidden = true; sugItems = []; sugIdx = -1; qEl.setAttribute('aria-expanded', 'false'); qEl.removeAttribute('aria-activedescendant'); }
+    function goAddr(i) {
+      var p = [A.y[i], A.x[i]]; closeSug(); qEl.value = A.a[i]; $('#search-msg').hidden = true;
+      map.setView(p, 18);
+      if (window._srch) map.removeLayer(window._srch);
+      window._srch = L.circleMarker(p, { radius: 9, color: '#1f2328', weight: 3, fillColor: '#fff', fillOpacity: 1 }).addTo(map).bindTooltip(A.a[i] + ', Rockford', { permanent: false });
+      if (document.activeElement === qEl) qEl.blur();
+    }
+    function suggest() {
+      var q = qEl.value.toLowerCase().replace(/\s+/g, ' ').trimStart();
+      if (q.length < 2) { closeSug(); return; }
+      if (!A) { loadAddr(); return; }
+      var out = [], m = q.match(/^(\d+)\s+(.*)$/), i;
+      if (m) {
+        var num = m[1] + ' ', rest = m[2].trim();
+        for (i = 0; i < A.l.length && out.length < 7; i++) if (A.l[i].indexOf(q) === 0) out.push({ i: i });
+        if (out.length < 7 && rest) for (i = 0; i < A.l.length && out.length < 7; i++) {
+          if (A.l[i].indexOf(num) === 0 && A.l[i].indexOf(q) !== 0 && (' ' + A.l[i].slice(num.length)).indexOf(' ' + rest) > -1) out.push({ i: i });
+        }
+      } else if (/^\d+$/.test(q)) {
+        for (i = 0; i < A.l.length && out.length < 7; i++) if (A.l[i].indexOf(q) === 0) out.push({ i: i });
+      } else {
+        var seen = {};
+        for (i = 0; i < A.l.length && out.length < 7; i++) {
+          var st = A.a[i].replace(/^\d+\w*\s+/, ''), sl = st.toLowerCase();
+          if (seen[sl]) continue;
+          var words = sl.split(' '), hit = sl.indexOf(q) === 0 || (words.length > 1 && words.slice(1).join(' ').indexOf(q) === 0);
+          if (hit) { seen[sl] = 1; out.push({ street: st, i: i }); }
+        }
+      }
+      sugItems = out; sugIdx = -1;
+      if (!out.length) { sugEl.innerHTML = '<li class="sug-none" role="presentation">No matching Rockford address. Press Go to search the map.</li>'; sugEl.hidden = false; qEl.setAttribute('aria-expanded', 'true'); return; }
+      sugEl.innerHTML = out.map(function (o, k) { return '<li role="option" id="sug-' + k + '" data-k="' + k + '">' + esc(o.street ? o.street + ' (street)' : A.a[o.i]) + '</li>'; }).join('');
+      sugEl.hidden = false; qEl.setAttribute('aria-expanded', 'true');
+    }
+    function pickSug(k) {
+      var o = sugItems[k]; if (!o) return;
+      if (o.street) {
+        var minY = 99, maxY = -99, minX = 0, maxX = -999, minXv = 999, st = o.street.toLowerCase();
+        for (var i = 0; i < A.a.length; i++) if (A.a[i].toLowerCase().replace(/^\d+\w*\s+/, '') === st) { minY = Math.min(minY, A.y[i]); maxY = Math.max(maxY, A.y[i]); minXv = Math.min(minXv, A.x[i]); maxX = Math.max(maxX, A.x[i]); }
+        closeSug(); qEl.value = o.street + ' '; map.fitBounds([[minY, minXv], [maxY, maxX]], { padding: [40, 40], maxZoom: 17 }); qEl.focus(); return;
+      }
+      goAddr(o.i);
+    }
+    qEl.setAttribute('role', 'combobox'); qEl.setAttribute('aria-autocomplete', 'list'); qEl.setAttribute('aria-controls', 'sug'); qEl.setAttribute('aria-expanded', 'false');
+    qEl.addEventListener('focus', function () { loadAddr(); });
+    qEl.addEventListener('input', suggest);
+    qEl.addEventListener('keydown', function (e) {
+      if (sugEl.hidden || !sugItems.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); sugIdx = (sugIdx + (e.key === 'ArrowDown' ? 1 : -1) + sugItems.length) % sugItems.length;
+        $$('#sug li').forEach(function (li, k) { li.setAttribute('aria-selected', String(k === sugIdx)); }); qEl.setAttribute('aria-activedescendant', 'sug-' + sugIdx);
+      } else if (e.key === 'Enter' && sugIdx > -1) { e.preventDefault(); pickSug(sugIdx); }
+      else if (e.key === 'Escape') closeSug();
+    });
+    sugEl.addEventListener('pointerdown', function (e) { var li = e.target.closest('li[data-k]'); if (li) { e.preventDefault(); pickSug(+li.dataset.k); } });
+    document.addEventListener('pointerdown', function (e) { if (!e.target.closest('#search')) closeSug(); });
     // search
     $('#search').addEventListener('submit', function (e) {
       e.preventDefault(); var q = $('#q').value.trim(), msg = $('#search-msg'); if (!q) return;
+      if (sugItems.length && !sugEl.hidden && sugItems[0].street === undefined && A) { pickSug(sugIdx > -1 ? sugIdx : 0); return; }
+      closeSug();
       msg.hidden = false; msg.textContent = 'Searching…';
       fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&viewbox=-89.30,42.40,-88.85,42.12&bounded=1&q=' + encodeURIComponent(q + ', Rockford, IL'))
         .then(function (r) { return r.json(); })
@@ -363,7 +505,7 @@
       setTimeout(function () { if (msg.textContent.indexOf('Searching') < 0) msg.hidden = true; }, 6000);
     });
   }
-  function resetFilters() { S.mode = 'all'; S.sev = new Set([0, 1]); S.years = new Set(DEF_YEARS); S.hours.clear(); S.rc.clear(); S.ow.clear(); S.roads = true; S.showOut = true; S.countOut = false; S.extent = false; syncControls(); render(); }
+  function resetFilters() { S.mode = 'all'; S.sev = new Set([0, 1]); S.years = new Set(DEF_YEARS); S.hours.clear(); S.rc.clear(); S.ow.clear(); S.roads = true; S.hin = false; S.hinMode = 'all'; S.showOut = true; S.countOut = false; S.extent = false; syncControls(); render(); }
 
   /* ---------- map ---------- */
   var ROAD_W = [3.2, 2.2, 1.3, 1];
@@ -375,6 +517,23 @@
       if (!S.roads) { l.setStyle({ opacity: 0 }); return; }
       l.setStyle({ color: sat ? '#ffffff' : '#a8a59e', weight: ROAD_W[i] * f, opacity: (sat ? 0.6 : 0.85) * (dim ? 0.3 : 1) });
     });
+  }
+  var hinLayers = {};
+  function styleHin() {
+    if (!hinLayers.t1) return;
+    var z = map.getZoom(), f = z <= 12 ? 0.9 : z <= 14 ? 1.2 : z <= 16 ? 1.7 : 2.3, pb = S.hinMode === 'pb', on = S.hin, w = 3.6 * f;
+    hinLayers.t1.setStyle({ color: '#D9730D', weight: w, opacity: on && !pb ? 0.95 : 0 });
+    hinLayers.t2.setStyle({ color: '#F0B429', weight: w, opacity: on && !pb ? 0.95 : 0 });
+    hinLayers.pb.setStyle({ color: '#D9730D', weight: w, opacity: on && pb ? 0.95 : 0 });
+  }
+  function loadHin() {
+    getJSON('data/hin.json').then(function (j) {
+      var rend = L.canvas({ pane: 'hin', padding: 0.3 });
+      ['t1', 't2', 'pb'].forEach(function (k) {
+        hinLayers[k] = L.polyline((j[k] || []).map(function (ln) { return ln.map(function (c) { return [c[1], c[0]]; }); }), { renderer: rend, interactive: false, lineCap: 'butt', lineJoin: 'round', smoothFactor: 1 }).addTo(map);
+      });
+      styleHin();
+    }).catch(function () { });
   }
   function loadRoads() {
     getJSON('data/arterials.json').then(function (j) {
@@ -409,10 +568,11 @@
     }
     baseLayers.sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics' });
     var saved = store('rcm-base'); setBase(saved && baseLayers[saved] ? saved : 'light');
+    map.createPane('hin').style.zIndex = 385; map.getPane('hin').style.pointerEvents = 'none'; loadHin();
     map.createPane('roads').style.zIndex = 380; map.getPane('roads').style.pointerEvents = 'none';
     loadRoads();
     dotLayer = L.layerGroup().addTo(map); kaLayer = L.layerGroup().addTo(map);
-    map.setView([42.2711, -89.094], window.innerWidth < 820 ? 11 : 12);
+    map.setView(startView ? startView.c : [42.2711, -89.094], startView ? startView.z : (window.innerWidth < 820 ? 11 : 12));
     var locCtl = L.control({ position: 'topright' });
     locCtl.onAdd = function () {
       var bar = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
@@ -431,12 +591,12 @@
     });
     map.on('locationerror', function () { $('#status').textContent = 'Could not get your location.'; });
     var lastK = -1;
-    map.on('zoomend', function () { styleRoads(); var z = map.getZoom(), k = z <= 11 ? 0 : z <= 13 ? 1 : z <= 15 ? 2 : 3; if (k !== lastK) { lastK = k; scheduleRender(); } });
+    map.on('zoomend', function () { styleRoads(); styleHin(); var z = map.getZoom(), k = z <= 11 ? 0 : z <= 13 ? 1 : z <= 15 ? 2 : 3; if (k !== lastK) { lastK = k; scheduleRender(); } });
     var mt; map.on('moveend', function () { if (S.extent) { clearTimeout(mt); mt = setTimeout(render, 150); } });
   }
 
   /* ---------- views ---------- */
-  var VIEW_TITLES = { about: 'About the data', data: 'Data', contact: 'Contact' };
+  var VIEW_TITLES = { network: 'Street risk', about: 'About the data', data: 'Data', contact: 'Contact' };
   function route() {
     var h = location.hash.replace('#', ''), v = VIEW_TITLES[h] ? h : '';
     $$('.view').forEach(function (s) { s.hidden = s.id !== 'view-' + v; });
@@ -457,7 +617,7 @@
     getJSON('data/ka.json').then(function (j) {
       rows = expand(j);
       var pts = rows.filter(function (r) { return r.ci; }).map(function (r) { return [r.lat, r.lon]; });
-      if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.04), { paddingBottomRight: [0, window.innerWidth <= 820 ? 130 : 0] });
+      if (pts.length && !startView) map.fitBounds(L.latLngBounds(pts).pad(0.04), { paddingBottomRight: [0, window.innerWidth <= 820 ? 130 : 0] });
       return need ? loadOther() : null;
     }).then(function () { syncControls(); render(); })
       .catch(function () { $('#status').textContent = 'The crash data could not be loaded. If you opened this file directly from your computer, run it from a web server instead.'; });
