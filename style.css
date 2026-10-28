@@ -163,12 +163,13 @@ footer.foot{font-size:12.5px;color:var(--ink-3);padding:24px 0 8px;max-width:760
   .nav{order:3;width:100%;margin:0;overflow-x:auto}
   .nav a{min-height:40px;padding:0 10px}
   #map{left:0}
-  .panel{top:auto;bottom:0;left:0;right:0;width:auto;height:min(72dvh,640px);border-right:0;border-top:1px solid var(--line);border-radius:18px 18px 0 0;transform:translateY(calc(100% - 118px - var(--safe-b)));transition:transform .38s var(--ease);box-shadow:0 -6px 28px rgba(0,0,0,.14);padding-bottom:calc(28px + var(--safe-b))}
-  .panel[data-open="true"]{transform:translateY(0)}
+  .panel{top:auto;bottom:0;left:0;right:0;width:auto;height:min(78dvh,680px);border-right:0;border-top:1px solid var(--line);border-radius:18px 18px 0 0;transform:translateY(var(--sheet-y,calc(100% - 64px - var(--safe-b))));will-change:transform;box-shadow:0 -6px 28px rgba(0,0,0,.14);padding-bottom:calc(28px + var(--safe-b))}
+  .panel.sheet-dragging{cursor:grabbing}
+  .sheet-handle{cursor:grab;-webkit-user-select:none;user-select:none}
   .sheet-handle{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;border:0;background:var(--panel);padding:8px 16px 6px;position:sticky;top:0;z-index:2;touch-action:none;min-height:44px}
   .sheet-handle i{width:40px;height:5px;border-radius:3px;background:var(--line-2)}
   .sheet-handle span{font-size:13.5px;font-weight:600;color:var(--ink)}
-  .leaflet-bottom{bottom:calc(122px + var(--safe-b))}
+  .leaflet-bottom{bottom:var(--peek,70px)}
   .leaflet-control-attribution{font-size:10px}
   .doc h1{font-size:24px}
 }
@@ -189,3 +190,23 @@ footer.foot{font-size:12.5px;color:var(--ink-3);padding:24px 0 8px;max-width:760
 
 .subh{margin:10px 0 6px;font-size:12.5px;font-weight:700;color:var(--ink-2,#555)}
 .road{margin:2px 0 6px;font-size:13px;color:#555}
+
+.search{position:relative}
+.sug{position:absolute;left:0;right:0;top:calc(100% + 6px);margin:0;padding:4px;list-style:none;background:#fff;border:1px solid var(--line-2);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.16);z-index:1400;max-height:min(60dvh,340px);overflow:auto}
+.sug li{min-height:44px;display:flex;align-items:center;padding:6px 12px;border-radius:8px;font-size:14.5px;cursor:pointer}
+.sug li[aria-selected="true"]{background:var(--ink);color:#fff}
+.sug li.sug-none{color:var(--ink-3);cursor:default;font-size:13.5px}
+@media (hover:hover){.sug li[data-k]:hover{background:#f0ede6}}
+.search .search-msg{right:0}
+
+/* charts on the Street risk page */
+.chart{margin:14px 0 22px;padding:14px 16px 8px;background:#fcfbf9;border:1px solid var(--line);border-radius:12px}
+.chart figcaption{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}.chart figcaption b{font-size:15.5px}.chart figcaption span{font-size:13px;color:var(--ink-2)}
+.ckey{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;margin:4px 0 8px}.ckey i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.chart .m{background:#D9D5CB}.chart .c{background:#D9730D}
+.crow{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;margin:7px 0}.clab{font-size:13.5px}
+.cb{display:flex;align-items:center;gap:6px;height:15px;margin:2px 0}.cb u{display:block;height:13px;border-radius:3px;min-width:2px}.cb em{font-style:normal;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tdet{margin:0 0 18px}.tdet summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;font-size:14px;color:var(--ink-2)}
+.tdet summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+@media (max-width:520px){.crow{grid-template-columns:1fr;gap:2px}.clab{font-weight:600}}

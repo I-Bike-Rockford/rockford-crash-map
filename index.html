@@ -18,11 +18,12 @@
 <header class="hdr">
   <a class="brand" href="#" aria-label="Rockford Crash Map, home"><b>Rockford Crash Map</b><span>Fatal and serious crashes, 2006–2025</span></a>
   <nav class="nav" aria-label="Main">
-    <a href="#" data-v="">Map</a><a href="#about" data-v="about">About the data</a><a href="#data" data-v="data">Data</a><a href="#contact" data-v="contact">Contact</a>
+    <a href="#" data-v="">Map</a><a href="#network" data-v="network">Street risk</a><a href="#about" data-v="about">About the data</a><a href="#data" data-v="data">Data</a><a href="#contact" data-v="contact">Contact</a>
   </nav>
   <form class="search" id="search" role="search">
     <label class="sr" for="q">Search for an address in Rockford</label>
     <input id="q" type="search" placeholder="Search an address" autocomplete="off" enterkeyhint="search">
+    <ul class="sug" id="sug" role="listbox" aria-label="Address suggestions" hidden></ul>
     <button type="submit">Go</button>
     <div class="search-msg" id="search-msg" role="status" hidden></div>
   </form>
@@ -96,7 +97,7 @@
     <div class="chips" id="ows" role="group" aria-label="Filter by road owner">
       <button type="button" class="chip" data-w="0" aria-pressed="false">State (IDOT)</button>
       <button type="button" class="chip" data-w="1" aria-pressed="false">County</button>
-      <button type="button" class="chip" data-w="2" aria-pressed="false">City or village</button>
+      <button type="button" class="chip" data-w="2" aria-pressed="false">City</button>
       <button type="button" class="chip" data-w="3" aria-pressed="false">Township / other</button>
     </div>
     <p class="lede" style="margin-top:6px;font-size:12.5px">Each crash is matched to the nearest mapped road. Choose none to see all.</p>
@@ -105,6 +106,8 @@
   <div class="sec">
     <h2>Map options</h2>
     <div class="switch"><input type="checkbox" id="sw-roads" checked><label for="sw-roads">Show arterial roads by owner<small>Thicker gray lines are state roads; thinner lines are county, then city and township roads.</small></label></div>
+    <div class="switch"><input type="checkbox" id="sw-hin"><label for="sw-hin">Show high-injury network<small>Stretches of street with repeated fatal and serious crashes, 2021–2025. It does not change with the filters. <a href="#network">How it was made</a></small></label></div>
+    <div class="seg" id="hin-mode" role="group" aria-label="High-injury network type" hidden style="margin:0 0 10px"><button type="button" data-hin="all" aria-pressed="true">All crashes</button><button type="button" data-hin="pb" aria-pressed="false">Walking and biking</button></div>
     <div class="switch"><input type="checkbox" id="sw-out" checked><label for="sw-out">Show crashes outside city limits<small>Shown faded. IDOT lists them as Rockford, but they plot just outside the current limits.</small></label></div>
     <div class="switch"><input type="checkbox" id="sw-count"><label for="sw-count">Count them in the totals<small>Off by default, so totals describe crashes inside the city limits.</small></label></div>
     <div class="switch"><input type="checkbox" id="sw-extent"><label for="sw-extent">Only count crashes in the current map view<small>Totals and charts follow where you pan and zoom.</small></label></div>
@@ -121,8 +124,10 @@
       <div><svg width="22" height="22" viewBox="0 0 30 30" aria-hidden="true" style="opacity:.35"><circle cx="15" cy="15" r="11" fill="#777"/></svg>Faded: outside city limits</div>
       <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="3.2" stroke-linecap="round"/></svg>State road (IDOT)</div>
       <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="2.2" stroke-linecap="round"/></svg>County road</div>
-      <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="1.3" stroke-linecap="round"/></svg>City or village arterial</div>
+      <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="1.3" stroke-linecap="round"/></svg>City arterial</div>
       <div><svg width="34" height="10" viewBox="0 0 34 10" aria-hidden="true"><line x1="2" y1="5" x2="32" y2="5" stroke="#a8a59e" stroke-width="1" stroke-linecap="round"/></svg>Township or other</div>
+      <div><svg width="34" height="14" viewBox="0 0 34 14" aria-hidden="true"><line x1="2" y1="7" x2="32" y2="7" stroke="#D9730D" stroke-width="4" stroke-linecap="round"/></svg>High-injury network, tier 1</div>
+      <div><svg width="34" height="14" viewBox="0 0 34 14" aria-hidden="true"><line x1="2" y1="7" x2="32" y2="7" stroke="#F0B429" stroke-width="4" stroke-linecap="round"/></svg>High-injury network, tier 2</div>
       <div style="grid-column:1/-1">A number on a point means several crashes are recorded at the same spot. Tap it to see them all.</div>
     </div>
   </div>
@@ -133,11 +138,380 @@
       <button type="button" class="btn small" data-base="light" aria-pressed="true">Light</button>
       <button type="button" class="btn small" data-base="sat" aria-pressed="false">Satellite</button>
     </div>
-    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="btn-table">View as a table</button><button type="button" class="btn" id="btn-reset">Reset filters</button></div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="btn-table">View as a table</button><button type="button" class="btn" id="btn-reset">Reset filters</button><button type="button" class="btn" id="btn-copy">Copy link</button></div>
+    <p class="status" id="copy-msg" role="status" aria-live="polite" style="margin:8px 0 0"></p>
   </div>
 </aside>
 
 <div class="tview" id="tview" hidden></div>
+
+<section class="view" id="view-network" hidden aria-labelledby="network-h"><article class="doc">
+<a class="back" href="#">← Back to the map</a>
+<h1 id="network-h">High-injury network and crash rates</h1>
+<p>Two questions come up whenever people look at a crash map. <strong>Where is the danger concentrated?</strong> And <strong>how dangerous is one kind of street compared with another?</strong> This page answers both and shows the numbers.</p>
+<h2>What we found</h2>
+<ul>
+<li><strong>A small share of streets holds a large share of the harm.</strong> About 2.5% of the city's road miles (20.5 miles) hold 41% of the fatal and serious-injury crashes. Add a second tier and 4.7% of road miles (37.7 miles) hold 60%.</li>
+<li><strong>Arterials are far more dangerous per mile.</strong> A mile of principal arterial had about 25 times as many fatal and serious-injury crashes as a mile of local street.</li>
+<li><strong>State-owned roads stand out.</strong> They are 7% of the city's road miles and had 29% of these crashes.</li>
+<li><strong>The network is mostly arterials.</strong> 91% of its length is principal or minor arterial. 35% is state-owned, 12% county-owned and 53% city-owned.</li>
+<li><strong>It captures most walking and biking harm.</strong> The network holds 59 of the 80 fatal and serious-injury crashes involving a person walking or biking (74%), and 61 of the 92 fatal crashes (66%).</li>
+<li><strong>Walking and biking crashes cluster even more tightly.</strong> 14 half-mile stretches, 0.8% of road miles, hold 44% of those walking and biking crashes on their own.</li>
+</ul>
+<h2>The high-injury network on the map</h2>
+<p>Turn on <strong>Show high-injury network</strong> under <em>Map options</em>. It appears as an orange or gold line, the same weight everywhere, over the gray road lines:</p>
+<ul>
+<li><strong>Tier 1 (orange):</strong> half-mile stretches of street with <strong>3 or more</strong> fatal or serious-injury crashes in the five years.</li>
+<li><strong>Tier 2 (gold):</strong> half-mile stretches with <strong>2</strong> more such crashes, after Tier 1 is set aside.</li>
+<li><strong>Walking and biking view (orange):</strong> half-mile stretches with <strong>2 or more</strong> fatal or serious-injury crashes involving a person walking or biking.</li>
+</ul>
+<p>The network is fixed to 2021–2025. It does not change when you use the year filter.</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th></th>
+<th>Half-mile stretches</th>
+<th>Road miles</th>
+<th>Share of city road miles</th>
+<th>Fatal and serious crashes covered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tier 1</td>
+<td>41</td>
+<td>20.5</td>
+<td>2.5%</td>
+<td>152 of 370 (41%)</td>
+</tr>
+<tr>
+<td>Tier 1 and 2</td>
+<td>76</td>
+<td>37.7</td>
+<td>4.7%</td>
+<td>222 of 370 (60%)</td>
+</tr>
+<tr>
+<td>Walking and biking</td>
+<td>14</td>
+<td>6.7</td>
+<td>0.8%</td>
+<td>35 of 80 (44%)</td>
+</tr>
+</tbody>
+</table></div>
+<h3>The 12 busiest half-mile stretches</h3>
+<p>Ranked by fatal and serious-injury crashes, 2021–2025. Street names come from the crash records.</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>Rank</th>
+<th>Street</th>
+<th>Fatal and serious crashes</th>
+<th>Fatal</th>
+<th>Involving walking or biking</th>
+<th>Crashes per mile per year</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Reed Ave</td>
+<td>6</td>
+<td>1</td>
+<td>2</td>
+<td>2.4</td>
+</tr>
+<tr>
+<td>2</td>
+<td>State St</td>
+<td>6</td>
+<td>0</td>
+<td>0</td>
+<td>2.4</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Main St</td>
+<td>6</td>
+<td>2</td>
+<td>0</td>
+<td>2.4</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Auburn St</td>
+<td>5</td>
+<td>1</td>
+<td>3</td>
+<td>2.0</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Central Ave</td>
+<td>5</td>
+<td>2</td>
+<td>3</td>
+<td>2.0</td>
+</tr>
+<tr>
+<td>6</td>
+<td>E State St</td>
+<td>5</td>
+<td>3</td>
+<td>3</td>
+<td>2.0</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Broadway</td>
+<td>4</td>
+<td>1</td>
+<td>2</td>
+<td>1.6</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Riverside Blvd</td>
+<td>4</td>
+<td>1</td>
+<td>0</td>
+<td>1.6</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Springfield Ave</td>
+<td>4</td>
+<td>2</td>
+<td>0</td>
+<td>1.6</td>
+</tr>
+<tr>
+<td>10</td>
+<td>9th St</td>
+<td>4</td>
+<td>1</td>
+<td>1</td>
+<td>1.6</td>
+</tr>
+<tr>
+<td>11</td>
+<td>2nd St</td>
+<td>4</td>
+<td>3</td>
+<td>4</td>
+<td>1.6</td>
+</tr>
+<tr>
+<td>12</td>
+<td>E Jefferson St</td>
+<td>4</td>
+<td>0</td>
+<td>1</td>
+<td>1.6</td>
+</tr>
+</tbody>
+</table></div>
+<p>Several stretches tie, so the order within a tie is not meaningful. A stretch on this list is not a verdict on the street. It is a place where the record shows repeated serious harm.</p>
+<h2>Crash rates per street mile</h2>
+<p>A rate is the number of crashes divided by the miles of street, per year. It lets us compare a short, busy street with a long, quiet one. Here, a rate is <strong>fatal and serious-injury crashes per centerline mile per year</strong>, 2021–2025.</p>
+<p>Miles are centerline miles from IDOT's road layers, for streets inside the city limits: 807 in all. A divided road counts once for each direction, and ramps are included. Of the 388 fatal and serious-injury crashes inside the city in these years, 370 could be matched to one of those streets and are counted here. The other 18 were too far from a mapped road.</p>
+<h3>By type of road</h3>
+<figure class="chart" role="group" aria-label="Road type: miles versus crashes"><figcaption><b>Road type: miles versus crashes</b><span>Principal and minor arterials are 17% of the city's road miles and had 74% of fatal and serious crashes, 2021–2025.</span></figcaption><div class="ckey" aria-hidden="true"><span><i class="m"></i>Share of road miles</span><span><i class="c"></i>Share of fatal and serious crashes</span></div><div class="crow"><div class="clab">Interstate or freeway</div><div class="cbars"><div class="cb"><u class="m" style="width:2.6%"></u><em><span class="sr">Interstate or freeway: </span>2%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:1.8%"></u><em>2%<span class="sr"> of fatal and serious crashes</span></em></div></div></div><div class="crow"><div class="clab">Principal arterial</div><div class="cbars"><div class="cb"><u class="m" style="width:9.4%"></u><em><span class="sr">Principal arterial: </span>8%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:50.8%"></u><em>46%<span class="sr"> of fatal and serious crashes</span></em></div></div></div><div class="crow"><div class="clab">Minor arterial</div><div class="cbars"><div class="cb"><u class="m" style="width:9.4%"></u><em><span class="sr">Minor arterial: </span>8%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:31.6%"></u><em>28%<span class="sr"> of fatal and serious crashes</span></em></div></div></div><div class="crow"><div class="clab">Collector</div><div class="cbars"><div class="cb"><u class="m" style="width:14.4%"></u><em><span class="sr">Collector: </span>13%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:12.7%"></u><em>11%<span class="sr"> of fatal and serious crashes</span></em></div></div></div><div class="crow"><div class="clab">Local street</div><div class="cbars"><div class="cb"><u class="m" style="width:75.2%"></u><em><span class="sr">Local street: </span>68%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:14.4%"></u><em>13%<span class="sr"> of fatal and serious crashes</span></em></div></div></div></figure><figure class="chart" role="group" aria-label="Crashes per mile per year, by road type"><figcaption><b>Crashes per mile per year, by road type</b><span>Fatal and serious-injury crashes per centerline mile per year, 2021–2025.</span></figcaption><div class="crow"><div class="clab">Interstate or freeway</div><div class="cbars"><div class="cb"><u class="c" style="width:10.9%"></u><em>0.06<span class="sr"> crashes per mile per year</span></em></div></div></div><div class="crow"><div class="clab">Principal arterial</div><div class="cbars"><div class="cb"><u class="c" style="width:89.1%"></u><em>0.49<span class="sr"> crashes per mile per year</span></em></div></div></div><div class="crow"><div class="clab">Minor arterial</div><div class="cbars"><div class="cb"><u class="c" style="width:56.4%"></u><em>0.31<span class="sr"> crashes per mile per year</span></em></div></div></div><div class="crow"><div class="clab">Collector</div><div class="cbars"><div class="cb"><u class="c" style="width:14.5%"></u><em>0.08<span class="sr"> crashes per mile per year</span></em></div></div></div><div class="crow"><div class="clab">Local street</div><div class="cbars"><div class="cb"><u class="c" style="width:3.6%"></u><em>0.02<span class="sr"> crashes per mile per year</span></em></div></div></div></figure><details class="tdet"><summary>Show the table</summary><div class="tbl"><table>
+<thead>
+<tr>
+<th>Road type</th>
+<th>Miles</th>
+<th>Share of road miles</th>
+<th>Fatal and serious crashes</th>
+<th>Fatal crashes</th>
+<th>Crashes per mile per year</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Interstate or freeway</td>
+<td>18.8</td>
+<td>2.3%</td>
+<td>6</td>
+<td>1</td>
+<td>0.06</td>
+</tr>
+<tr>
+<td>Principal arterial</td>
+<td>68.9</td>
+<td>8.5%</td>
+<td>169</td>
+<td>52</td>
+<td>0.49</td>
+</tr>
+<tr>
+<td>Minor arterial</td>
+<td>68.3</td>
+<td>8.5%</td>
+<td>105</td>
+<td>18</td>
+<td>0.31</td>
+</tr>
+<tr>
+<td>Collector</td>
+<td>105.0</td>
+<td>13.0%</td>
+<td>42</td>
+<td>11</td>
+<td>0.08</td>
+</tr>
+<tr>
+<td>Local street</td>
+<td>546.2</td>
+<td>67.7%</td>
+<td>48</td>
+<td>10</td>
+<td>0.02</td>
+</tr>
+</tbody>
+</table></div></details>
+<h3>By who owns the road</h3>
+<figure class="chart" role="group" aria-label="Road owner: miles versus crashes"><figcaption><b>Road owner: miles versus crashes</b><span>State roads are 7% of the city's road miles and had 29% of fatal and serious crashes, 2021–2025.</span></figcaption><div class="ckey" aria-hidden="true"><span><i class="m"></i>Share of road miles</span><span><i class="c"></i>Share of fatal and serious crashes</span></div><div class="crow"><div class="clab">State (IDOT)</div><div class="cbars"><div class="cb"><u class="m" style="width:7.8%"></u><em><span class="sr">State (IDOT): </span>7%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:32.4%"></u><em>29%<span class="sr"> of fatal and serious crashes</span></em></div></div></div><div class="crow"><div class="clab">County</div><div class="cbars"><div class="cb"><u class="m" style="width:4.4%"></u><em><span class="sr">County: </span>4%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:15.0%"></u><em>14%<span class="sr"> of fatal and serious crashes</span></em></div></div></div><div class="crow"><div class="clab">City</div><div class="cbars"><div class="cb"><u class="m" style="width:93.6%"></u><em><span class="sr">City: </span>84%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:62.1%"></u><em>56%<span class="sr"> of fatal and serious crashes</span></em></div></div></div><div class="crow"><div class="clab">Township or other</div><div class="cbars"><div class="cb"><u class="m" style="width:5.3%"></u><em><span class="sr">Township or other: </span>5%<span class="sr"> of road miles</span></em></div><div class="cb"><u class="c" style="width:1.6%"></u><em>1%<span class="sr"> of fatal and serious crashes</span></em></div></div></div></figure><details class="tdet"><summary>Show the table</summary><div class="tbl"><table>
+<thead>
+<tr>
+<th>Owner</th>
+<th>Miles</th>
+<th>Share of road miles</th>
+<th>Fatal and serious crashes</th>
+<th>Fatal crashes</th>
+<th>Crashes per mile per year</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>State (IDOT)</td>
+<td>56.5</td>
+<td>7.0%</td>
+<td>108</td>
+<td>31</td>
+<td>0.38</td>
+</tr>
+<tr>
+<td>County</td>
+<td>32.4</td>
+<td>4.0%</td>
+<td>50</td>
+<td>14</td>
+<td>0.31</td>
+</tr>
+<tr>
+<td>City</td>
+<td>679.6</td>
+<td>84.2%</td>
+<td>207</td>
+<td>46</td>
+<td>0.06</td>
+</tr>
+<tr>
+<td>Township or other</td>
+<td>38.6</td>
+<td>4.8%</td>
+<td>5</td>
+<td>1</td>
+<td>0.03</td>
+</tr>
+</tbody>
+</table></div></details>
+<h3>Road type and owner together</h3>
+<p>Owner differences shrink once you compare similar roads. Principal arterials had about 0.58 crashes per mile per year on state roads and 0.41 on both county and city roads. Minor arterials had 0.31 whether the State, the County or the City owns the road. Most of the gap in the owner table above comes from the State owning more arterial miles.</p>
+<div class="tbl"><table>
+<thead>
+<tr>
+<th>Road type</th>
+<th>Owner</th>
+<th>Miles</th>
+<th>Fatal and serious crashes</th>
+<th>Crashes per mile per year</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Interstate or freeway</td>
+<td>State (IDOT)</td>
+<td>15.4</td>
+<td>6</td>
+<td>0.08</td>
+</tr>
+<tr>
+<td>Principal arterial</td>
+<td>State (IDOT)</td>
+<td>31.6</td>
+<td>92</td>
+<td>0.58</td>
+</tr>
+<tr>
+<td>Principal arterial</td>
+<td>County</td>
+<td>14.0</td>
+<td>29</td>
+<td>0.41</td>
+</tr>
+<tr>
+<td>Principal arterial</td>
+<td>City</td>
+<td>23.3</td>
+<td>48</td>
+<td>0.41</td>
+</tr>
+<tr>
+<td>Minor arterial</td>
+<td>State (IDOT)</td>
+<td>5.2</td>
+<td>8</td>
+<td>0.31</td>
+</tr>
+<tr>
+<td>Minor arterial</td>
+<td>County</td>
+<td>11.6</td>
+<td>18</td>
+<td>0.31</td>
+</tr>
+<tr>
+<td>Minor arterial</td>
+<td>City</td>
+<td>49.6</td>
+<td>77</td>
+<td>0.31</td>
+</tr>
+<tr>
+<td>Collector</td>
+<td>City</td>
+<td>88.9</td>
+<td>36</td>
+<td>0.08</td>
+</tr>
+<tr>
+<td>Local street</td>
+<td>City</td>
+<td>517.8</td>
+<td>46</td>
+<td>0.02</td>
+</tr>
+</tbody>
+</table></div>
+<p>A few small combinations, such as county and township collectors, are left out of this table because they have very little road or very few crashes.</p>
+<h2>What to keep in mind</h2>
+<ul>
+<li><strong>Small numbers.</strong> Many streets have only a few serious crashes in five years. Differences of one crash are noise. Treat the tiers as groups, not as a precise ranking.</li>
+<li><strong>No traffic counts.</strong> These are rates per mile of street, not per mile driven, walked or biked. A busy street will show more crashes simply because more people use it. We did not have traffic volumes for every street.</li>
+<li><strong>Crashes, not causes.</strong> The network says where serious harm has happened. It does not say why, and it does not say who was at fault.</li>
+<li><strong>Police-reported crashes only.</strong> Crashes that were not reported, and near misses, are not counted. Walking and biking crashes are more likely to be under-reported.</li>
+<li><strong>Matching is imperfect.</strong> A crash on a side street near an arterial can be matched to the arterial. Each crash is matched to the nearest mapped road within 100 feet, and where it is within 25 feet of two roads, such as at an intersection, to the higher-class road. We used the same rule for every crash.</li>
+<li><strong>The half-mile window is a choice.</strong> A different window or a different cutoff would give a somewhat different network. A ten-year version of the network, using a higher bar of 4 crashes in a half mile, overlaps 84% of the five-year Tier 1 length, so the main corridors do not depend on the five years we chose.</li>
+<li><strong>Not a priority list.</strong> A safety program should also consider who lives nearby, how many people walk and bike there, and what can be fixed. This page does not.</li>
+</ul>
+<h2>Check or reproduce it</h2>
+<p>The crash file on the <a href="#data">Data</a> page has the crash location, severity and mode, and the road type and road owner each crash was matched to. The road layers are IDOT's statewide functional class and jurisdiction layers. The city limits are the City of Rockford boundary file. Write to us from the <a href="#contact">Contact</a> page if you would like the street-level results behind the tables.</p>
+<p>The network will be rebuilt when IDOT publishes the 2026 crashes.</p>
+<footer class="foot">An initiative of I Bike Rockford, a volunteer group. Not an official City of Rockford or IDOT product.</footer>
+</article></section>
 
 <section class="view" id="view-about" hidden aria-labelledby="about-h"><article class="doc">
 <a class="back" href="#">← Back to the map</a>
@@ -217,7 +591,7 @@
 <h1 id="data-h">Data</h1>
 <p>Everything on the map comes from crash records of the Illinois Department of Transportation (IDOT), 2006–2025, plus person-level facts about fatal crashes from the federal FARS database. Download the crash file to explore it yourself.</p>
 <div class="dl"><a href="downloads/Rockford_Crashes_2006-2025.csv" download>Download crashes, 2006–2025 (CSV)</a></div>
-<p class="note"><b>Please credit:</b> “I Bike Rockford, using Illinois Department of Transportation crash data.” The file has one row per crash (81,979 rows), including 39 crashes with no usable location and crashes that plot just outside the city limits (see the IN_CITY and XY_QA columns). It contains no names. Road class and road owner come from IDOT’s statewide functional class and jurisdiction map layers, matched to each crash by location (see the dictionary below); they describe the road, not who was at fault. Read <a href="#about">About the data</a> before drawing conclusions; counts are minimums, not rates.</p>
+<p class="note"><b>Please credit:</b> “I Bike Rockford, using Illinois Department of Transportation crash data.” The file has one row per crash (81,979 rows), including 39 crashes with no usable location and crashes that plot just outside the city limits (see the IN_CITY and XY_QA columns). It contains no names. Road class and road owner come from IDOT’s statewide functional class and jurisdiction map layers, matched to each crash by location (see the dictionary below); they describe the road, not who was at fault. The address search uses property addresses from Winnebago County parcel data. Nothing about owners is used or published. Read <a href="#about">About the data</a> before drawing conclusions; counts are minimums, not rates.</p>
 
 <h2>Data dictionary</h2>
 <div class="tbl"><table>
@@ -417,7 +791,7 @@
 <tr>
 <td>ROAD_OWNER</td>
 <td>Text</td>
-<td>Who has jurisdiction over that road, from the IDOT jurisdiction layer: State (IDOT), County, City or village, or Township or other (includes the Tollway). Matched the same way as ROAD_CLASS. Blank if no road is within 100 feet.</td>
+<td>Who has jurisdiction over that road, from the IDOT jurisdiction layer: State (IDOT), County, City (any city or village), or Township or other (includes the Tollway). Matched the same way as ROAD_CLASS. Blank if no road is within 100 feet.</td>
 </tr>
 <tr>
 <td>FARS_MATCH</td>
